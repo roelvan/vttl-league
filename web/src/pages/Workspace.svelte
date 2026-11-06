@@ -6,12 +6,20 @@
   import Dialog from '../dialogs/Dialog.svelte';
   import NewMatchday from '../dialogs/NewMatchday.svelte';
   import SelectPlayers from '../dialogs/SelectPlayers.svelte';
-  import { ws, openSheets, activate, connect, scheduleFlush, importFromVttl } from '../lib/workspace.svelte';
+  import { ws, openSheets, activate, connect, scheduleFlush, importFromVttl, uploadSheet } from '../lib/workspace.svelte';
   import { data, loadCategories, loadClubs, loadMatches, defaultCategory } from '../lib/data.svelte';
   import { getSystem, SYSTEMS } from '../lib/sheet/systems';
   import { computeScore } from '../lib/sheet/score';
   import { validateSheet } from '../lib/validation';
   import UploadDialog from '../dialogs/UploadDialog.svelte';
+  import PrintDialog from '../dialogs/PrintDialog.svelte';
+  import ExportDialog from '../dialogs/ExportDialog.svelte';
+  import PrintSheet from '../components/print/PrintSheet.svelte';
+  import RefereeSlips from '../components/print/RefereeSlips.svelte';
+  import type { PrintJob } from '../lib/sheet/print';
+  import { settings } from '../lib/settings.svelte';
+  import { vttlStatus } from '../lib/sheet/vttl';
+  import { tick } from 'svelte';
   import { custom } from '../lib/sheet/create';
   import { todayIso } from '../lib/format';
   import Credits from '../components/Credits.svelte';
@@ -21,6 +29,8 @@
     | { kind: 'custom' }
     | { kind: 'about' }
     | { kind: 'upload' }
+    | { kind: 'export' }
+    | { kind: 'print'; id: string }
     | { kind: 'players'; id: string; side: 'home' | 'away' }
     | { kind: 'validate'; id: string; errors: string[] }
     | null;
@@ -42,7 +52,52 @@
     if (s) dialog = { kind: 'validate', id, errors: validateSheet(s) };
   }
 
-  function onaction(a: 'matchday' | 'custom' | 'validate' | 'about' | 'upload' | 'import') {
+  // ---------------------------------------------------------------- print
+  let printJob = $state<PrintJob | null>(null);
+  const activeId = () => (ws.active && ws.active !== 'overview' ? ws.active : null);
+
+  async function doPrint(job: PrintJob) {
+    dialog = null;
+    printJob = job;
+    await tick();
+    const page = document.getElementById('page-size') ?? document.head.appendChild(Object.assign(document.createElement('style'), { id: 'page-size' }));
+    page.textContent = `@page { size: A4 ${job.what === 'sheet' ? 'landscape' : 'portrait'}; margin: 0; }`;
+    // Chrome blocks in print(); Safari does not. Clean up when the print dialog is closed.
+    addEventListener(
+      'afterprint',
+      () => {
+        printJob = null;
+        if (job.what === 'sheet') autoUpload(job.id);
+      },
+      { once: true },
+    );
+    window.print();
+  }
+
+  /** ScoreSheet: after printing, a valid official sheet is uploaded automatically. */
+  async function autoUpload(id: string) {
+    const s = ws.entries[id]?.view;
+    if (!settings.autoUpload || !s || !s.isOfficial || s.vttlLocked || !getSystem(s.matchSystemId).competitive) return;
+    if (vttlStatus(s, getSystem(s.matchSystemId)) === 'synced') return;
+    if (validateSheet(s).length) {
+      ws.message =
+        'Opgelet: het wedstrijdblad werd nog niet geüpload naar de competitiewebsite omdat het validatiefouten bevat. Upload het manueel via "Bestand => Upload naar competitiewebsite".';
+      return;
+    }
+    try {
+      const r = await uploadSheet(id, false);
+      ws.message = r.ok ? `Wedstrijdblad ${r.dryRun ? 'als proef ' : ''}geüpload na het afdrukken` : `Upload mislukt: ${r.errors.join('; ')}`;
+    } catch (e) {
+      ws.message = `Upload na afdrukken mislukt: ${e instanceof Error ? e.message : e}`;
+    }
+  }
+
+  function onaction(a: 'matchday' | 'custom' | 'validate' | 'about' | 'upload' | 'import' | 'print' | 'export') {
+    if (a === 'print') {
+      const id = activeId();
+      if (id) dialog = { kind: 'print', id };
+      return;
+    }
     if (a === 'import') {
       for (const id of ws.open) importFromVttl(id).catch((e) => (ws.message = `VTTL ophalen mislukt: ${e.message}`));
       return;
@@ -59,6 +114,11 @@
   }
 
   function onkey(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+      e.preventDefault();
+      onaction('print');
+      return;
+    }
     if (e.key === 'F11') {
       e.preventDefault();
       if (document.fullscreenElement) document.exitFullscreen();
@@ -83,7 +143,7 @@
 
 <div class="app">
   <MenuBar {onaction} />
-  <NavBar onvalidate={runValidation} />
+  <NavBar onvalidate={runValidation} onprint={(id) => (dialog = { kind: 'print', id })} />
 
   <div class="screen">
     {#if active}
@@ -159,6 +219,10 @@
       <button onclick={makeCustom}>OK</button>
     {/snippet}
   </Dialog>
+{:else if dialog?.kind === 'print'}
+  <PrintDialog id={dialog.id} onclose={() => (dialog = null)} onprint={doPrint} />
+{:else if dialog?.kind === 'export'}
+  <ExportDialog onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'upload'}
   <UploadDialog onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'about'}
@@ -167,3 +231,10 @@
     {#snippet footer()}<button onclick={() => (dialog = null)}>OK</button>{/snippet}
   </Dialog>
 {/if}
+
+<div id="print-root">
+  {#if printJob && ws.entries[printJob.id]}
+    {#if printJob.what === 'sheet'}<PrintSheet sheet={ws.entries[printJob.id].view} />
+    {:else}<RefereeSlips sheet={ws.entries[printJob.id].view} layout={printJob.layout} />{/if}
+  {/if}
+</div>

@@ -6,7 +6,7 @@
   import { vttlStatus } from '../lib/sheet/vttl';
   import VttlIcon from './VttlIcon.svelte';
 
-  let { onvalidate }: { onvalidate: (id: string) => void } = $props();
+  let { onvalidate, onprint }: { onvalidate: (id: string) => void; onprint: (id: string) => void } = $props();
 
   function score(id: string) {
     const s = ws.entries[id]?.view;
@@ -59,7 +59,7 @@
 {#if menu}
   <div class="ctx" style:left="{menu.x}px" style:top="{menu.y}px" role="menu">
     <button role="menuitem" onclick={() => close(menu!.id)}>Sluiten</button>
-    <button role="menuitem" disabled title="Komt in fase 3">Printen</button>
+    <button role="menuitem" onclick={() => onprint(menu!.id)}>Printen</button>
     <button role="menuitem" onclick={() => onvalidate(menu!.id)}>Valideer</button>
   </div>
 {/if}

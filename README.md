@@ -46,6 +46,11 @@ cargo test && pnpm check
   or empty VTTL value never overwrites a local edit. Import on open and every 5 minutes for
   sheets of today/yesterday. Live partial uploads follow ScoreSheet's LiveUpdateService.
   Validated/locked on VTTL = read-only. The status icon (✓ ↑ ! 🔒) compares sheet and `vttlSeen`.
+- `web/src/components/print/`: the VTTL scheidsrechtersblad (A4 landscape, positions in cm from
+  ScoreSheet's VttlScoreTemplate.xaml) and the referee slips (2x4, 1x8, per table). Printing uses
+  the browser; "Opslaan als PDF" gives the PDF. A valid sheet is uploaded after printing
+  (ScoreSheet auto-upload, can be switched off). Print class names have a `ps-`/`rs-` prefix so
+  the screen CSS cannot leak in.
 - `src/scoreboard.rs`: decoder for the ESP32 scoreboard (not linked yet).
 
 ## Differences with ScoreSheet (on purpose)

@@ -4,7 +4,7 @@
   import { logout } from '../lib/session.svelte';
   import { navigate } from '../lib/router.svelte';
 
-  let { onaction }: { onaction: (a: 'matchday' | 'custom' | 'validate' | 'about' | 'upload' | 'import') => void } = $props();
+  let { onaction }: { onaction: (a: 'matchday' | 'custom' | 'validate' | 'about' | 'upload' | 'import' | 'print' | 'export') => void } = $props();
 
   let open = $state<string | null>(null);
   const toggle = (m: string) => (e: MouseEvent) => {
@@ -36,8 +36,8 @@
         <button role="menuitem" disabled={!ws.open.length} onclick={closeAll}>Alles sluiten</button>
         <hr />
         <button role="menuitem" disabled={!sheetOpen} onclick={() => onaction('validate')}>Valideer</button>
-        <button role="menuitem" disabled title="Komt in fase 3">Printen <kbd>Ctrl+P</kbd></button>
-        <button role="menuitem" disabled title="Komt in fase 4">Exporteer wedstrijden</button>
+        <button role="menuitem" disabled={!sheetOpen} onclick={() => onaction('print')}>Printen <kbd>Ctrl+P</kbd></button>
+        <button role="menuitem" disabled={!ws.open.length} onclick={() => onaction('export')}>Exporteer wedstrijden</button>
         <button role="menuitem" disabled={!ws.open.length} onclick={() => onaction('upload')}>Upload naar competitiewebsite</button>
         <button role="menuitem" disabled={!ws.open.length} onclick={() => onaction('import')}>Gegevens ophalen bij VTTL</button>
         <hr />
@@ -55,6 +55,9 @@
         </button>
         <button role="menuitemcheckbox" aria-checked={settings.showResultsInNav} onclick={() => { settings.showResultsInNav = !settings.showResultsInNav; saveSettings(); }}>
           <span class="chk">{settings.showResultsInNav ? '✓' : ''}</span> Uitslag tonen in de navigatie
+        </button>
+        <button role="menuitemcheckbox" aria-checked={settings.autoUpload} onclick={() => { settings.autoUpload = !settings.autoUpload; saveSettings(); }}>
+          <span class="chk">{settings.autoUpload ? '✓' : ''}</span> Automatisch uploaden na afdrukken
         </button>
         <hr />
         <span class="mb-label">Live-updates naar VTTL tijdens de match</span>

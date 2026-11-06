@@ -12,9 +12,12 @@ interface Settings {
   zoom: number;
   /** Live partial uploads to VTTL while the match is played (ScoreSheet: on). */
   liveUpdates: 'on' | 'super' | 'off';
+  /** ScoreSheet "auto-upload": upload a valid sheet after printing it. */
+  autoUpload: boolean;
+  slipLayout: '2x4' | '1x8' | 'table';
 }
 
-const defaults: Settings = { protectMatchInfo: true, showResultsInNav: true, openAway: false, openByes: false, zoom: 1, liveUpdates: 'on' };
+const defaults: Settings = { protectMatchInfo: true, showResultsInNav: true, openAway: false, openByes: false, zoom: 1, liveUpdates: 'on', autoUpload: true, slipLayout: '2x4' };
 
 function load(): Settings {
   try {
