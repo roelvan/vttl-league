@@ -24,11 +24,21 @@ pub struct Creds {
 
 type Slot = Arc<OnceCell<std::result::Result<Arc<Node>, String>>>;
 
+/// Cheap to clone: all clones share the HTTP client and the cache.
+#[derive(Clone)]
 pub struct Tabt {
+    inner: Arc<Inner>,
+}
+
+struct Inner {
     http: reqwest::Client,
     endpoint: String,
     cache: Mutex<HashMap<String, (Instant, Slot)>>,
 }
+
+/// After its TTL, a cached answer is still served for this long while a fresh copy loads in
+/// the background (stale-while-revalidate). Only a cold cache makes a user wait for VTTL.
+const STALE_FOR: Duration = Duration::from_secs(24 * 3600);
 
 // ---------------------------------------------------------------- types
 
@@ -109,6 +119,8 @@ pub struct PlayerCategory {
     pub min_age: Option<i64>,
     pub max_age: Option<i64>,
     pub is_group: bool,
+    /// For a group: the ids of its member categories.
+    pub group_members: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -236,13 +248,15 @@ pub const TTL_DAY: Duration = Duration::from_secs(86400);
 impl Tabt {
     pub fn new(endpoint: String) -> Self {
         Self {
-            http: reqwest::Client::builder()
-                .timeout(Duration::from_secs(20))
-                .pool_idle_timeout(Duration::from_secs(90))
-                .build()
-                .unwrap(),
-            endpoint,
-            cache: Mutex::new(HashMap::new()),
+            inner: Arc::new(Inner {
+                http: reqwest::Client::builder()
+                    .timeout(Duration::from_secs(20))
+                    .pool_idle_timeout(Duration::from_secs(90))
+                    .build()
+                    .unwrap(),
+                endpoint,
+                cache: Mutex::new(HashMap::new()),
+            }),
         }
     }
 
@@ -252,27 +266,60 @@ impl Tabt {
             inner.push_str(&format!("<ns1:{k}>{}</ns1:{k}>", escape(v)));
         }
         if ttl.is_zero() {
-            return self.fetch(creds, element, &inner).await.map(Arc::new);
+            return self.inner.fetch(creds, element, &inner).await.map(Arc::new);
         }
         let key = format!("{element}|{inner}");
-        let slot = {
-            let mut cache = self.cache.lock().unwrap();
+        enum Plan {
+            Use(Slot),
+            /// Serve this stale value and refresh in the background.
+            Stale(Arc<Node>),
+        }
+        let plan = {
+            let mut cache = self.inner.cache.lock().unwrap();
             match cache.get(&key) {
-                Some((t, s)) if t.elapsed() < ttl => s.clone(),
+                Some((t, s)) if t.elapsed() < ttl => Plan::Use(s.clone()),
+                Some((t, s)) if t.elapsed() < ttl + STALE_FOR && matches!(s.get(), Some(Ok(_))) => {
+                    let old = s.get().unwrap().as_ref().unwrap().clone();
+                    // Keep serving the old value as fresh while one background task refreshes it.
+                    let kept: Slot = Arc::new(OnceCell::new_with(Some(Ok(old.clone()))));
+                    cache.insert(key.clone(), (Instant::now(), kept.clone()));
+                    let this = self.clone();
+                    let creds = creds.cloned();
+                    let (k, el, inn) = (key.clone(), element.to_string(), inner.clone());
+                    tokio::spawn(async move {
+                        match this.inner.fetch(creds.as_ref(), &el, &inn).await {
+                            Ok(n) => {
+                                let mut cache = this.inner.cache.lock().unwrap();
+                                // Only replace what we put there (an invalidate may have run).
+                                if cache.get(&k).is_some_and(|(_, s)| Arc::ptr_eq(s, &kept)) {
+                                    let new: Slot = Arc::new(OnceCell::new_with(Some(Ok(Arc::new(n)))));
+                                    cache.insert(k, (Instant::now(), new));
+                                }
+                            }
+                            // The old value stays for another TTL.
+                            Err(e) => tracing::warn!("background refresh of {el} failed: {e:#}"),
+                        }
+                    });
+                    Plan::Stale(old)
+                }
                 _ => {
                     let s: Slot = Arc::new(OnceCell::new());
                     cache.insert(key.clone(), (Instant::now(), s.clone()));
-                    s
+                    Plan::Use(s)
                 }
             }
         };
+        let slot = match plan {
+            Plan::Stale(old) => return Ok(old),
+            Plan::Use(s) => s,
+        };
         let r = slot
-            .get_or_init(|| async { self.fetch(creds, element, &inner).await.map(Arc::new).map_err(|e| e.to_string()) })
+            .get_or_init(|| async { self.inner.fetch(creds, element, &inner).await.map(Arc::new).map_err(|e| e.to_string()) })
             .await
             .clone();
         if r.is_err() {
             // Do not keep errors: the next request tries again.
-            let mut cache = self.cache.lock().unwrap();
+            let mut cache = self.inner.cache.lock().unwrap();
             if cache.get(&key).is_some_and(|(_, s)| Arc::ptr_eq(s, &slot)) {
                 cache.remove(&key);
             }
@@ -280,6 +327,9 @@ impl Tabt {
         r.map_err(|e| anyhow!(e))
     }
 
+}
+
+impl Inner {
     async fn fetch(&self, creds: Option<&Creds>, element: &str, inner: &str) -> Result<Node> {
         let creds = creds
             .map(|c| {
@@ -306,11 +356,14 @@ impl Tabt {
         tracing::debug!(element, ms = started.elapsed().as_millis() as u64, bytes = resp.len(), "tabt");
         xml::soap_body(&resp)
     }
+}
+
+impl Tabt {
 
     /// Drops every cached entry whose key contains `needle` (e.g. a club id).
     #[allow(dead_code)]
     pub fn invalidate(&self, needle: &str) {
-        self.cache.lock().unwrap().retain(|k, _| !k.contains(needle));
+        self.inner.cache.lock().unwrap().retain(|k, _| !k.contains(needle));
     }
 
     pub async fn test(&self, creds: &Creds) -> Result<TestResult> {
@@ -465,6 +518,7 @@ impl Tabt {
                 min_age: opt(p, "MinimumAge"),
                 max_age: opt(p, "MaximumAge"),
                 is_group: p.b("IsGroup"),
+                group_members: p.s("GroupMembers").split(',').filter_map(|x| x.trim().parse().ok()).collect(),
             })
             .collect())
     }
@@ -649,6 +703,48 @@ pub fn rank_key(ranking: &str) -> (u8, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fake TabT endpoint that answers <R><V>n</V></R> with n = number of calls so far.
+    async fn fake_vttl() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let hits = Arc::new(AtomicUsize::new(0));
+        let h = hits.clone();
+        let app = axum::Router::new().route(
+            "/",
+            axum::routing::post(move || {
+                let n = h.fetch_add(1, Ordering::SeqCst) + 1;
+                async move {
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                    format!("<Envelope><Body><R><V>{n}</V></R></Body></Envelope>")
+                }
+            }),
+        );
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, hits)
+    }
+
+    #[tokio::test]
+    async fn cache_coalesces_and_serves_stale() {
+        use std::sync::atomic::Ordering;
+        let (url, hits) = fake_vttl().await;
+        let t = Tabt::new(url);
+        let ttl = Duration::from_millis(100);
+        // Ten parallel requests share one HTTP call.
+        let r = futures_util::future::join_all((0..10).map(|_| t.call(None, "X", &[], ttl))).await;
+        assert!(r.iter().all(|n| n.as_ref().unwrap().i("V") == 1));
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        // After the TTL: the old value comes back at once, a refresh runs in the background.
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        let started = Instant::now();
+        assert_eq!(t.call(None, "X", &[], ttl).await.unwrap().i("V"), 1);
+        assert!(started.elapsed() < Duration::from_millis(20), "stale answer must not wait");
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+        assert_eq!(t.call(None, "X", &[], ttl).await.unwrap().i("V"), 2);
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
 
     #[test]
     fn ranking_order() {

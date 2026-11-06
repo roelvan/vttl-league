@@ -4,6 +4,7 @@ use crate::app::App;
 use crate::auth::{self, User};
 use crate::crypto;
 use crate::db::{self, Account};
+use crate::sheets;
 use crate::tabt::{self, Creds, TeamMatch};
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -82,6 +83,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/clubs", get(clubs))
         .route("/api/player-categories", get(player_categories))
         .route("/api/match-systems", get(match_systems))
+        .route("/api/sheets", get(sheets::list))
+        .route("/api/sheet", get(sheets::get_one).put(sheets::create))
+        .route("/api/sheet/ops", post(sheets::ops))
+        .route("/api/ws", get(sheets::ws))
         .with_state(app)
 }
 
@@ -358,7 +363,25 @@ async fn club_members(State(app): State<Arc<App>>, u: User, Query(q): Query<Memb
         Some(c) => c.as_str(),
         None => u.club()?,
     };
-    Ok(Json(app.tabt.members(&u.creds, season, club, q.category).await.map_err(ApiError::vttl)?))
+    let members = app.tabt.members(&u.creds, season, club, q.category).await.map_err(ApiError::vttl)?;
+    Ok(Json(active_members(members)))
+}
+
+/// Same as ScoreSheet (TabTUpdater.FixMembers): keep the statuses that may play and renumber
+/// the strength-list positions after the filter. If nobody is left, keep the list as it is.
+fn active_members(members: Vec<tabt::Member>) -> Vec<tabt::Member> {
+    let mut active: Vec<tabt::Member> = members
+        .iter()
+        .filter(|m| matches!(m.status.as_str(), "A" | "V" | "S" | "T" | "O" | "P" | "D"))
+        .cloned()
+        .collect();
+    if active.is_empty() {
+        return members;
+    }
+    for (i, m) in active.iter_mut().enumerate() {
+        m.position = i as i64 + 1;
+    }
+    active
 }
 
 async fn player_categories(State(app): State<Arc<App>>, u: User, Query(q): Query<SeasonQuery>) -> R<Vec<tabt::PlayerCategory>> {

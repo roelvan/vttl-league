@@ -1,0 +1,9 @@
+{
+  "name": "VTTL League",
+  "short_name": "VTTL League",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f0f0",
+  "theme_color": "#025a41",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

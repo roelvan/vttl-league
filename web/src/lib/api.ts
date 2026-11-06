@@ -4,7 +4,17 @@
 // While it does, every request gets a redirect or an HTML page instead of our JSON.
 // Those answers are reported as `offline` (kind "portal"), never as data.
 
-import type { Me, Member, ClubInfo, MatchList, TeamMatch, PlayerCategory, MatchSystem, Season } from './types';
+import type { Me, Member, ClubInfo, MatchList, TeamMatch, PlayerCategory, MatchSystem, Season, Club } from './types';
+import type { Sheet } from './sheet/types';
+import type { Op } from './sheet/ops';
+
+export interface StoredSheet {
+  id: string;
+  rev: number;
+  day: string;
+  season: number;
+  doc: Sheet;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -87,4 +97,11 @@ export const api = {
   },
   playerCategories: (season?: number) => request<PlayerCategory[]>('GET', `/api/player-categories${q(season)}`),
   matchSystems: () => request<MatchSystem[]>('GET', '/api/match-systems'),
+  clubs: (season?: number) => request<Club[]>('GET', `/api/clubs${q(season)}`),
+  sheetsOn: (day: string) => request<StoredSheet[]>('GET', `/api/sheets?day=${encodeURIComponent(day)}`),
+  sheet: (id: string) => request<StoredSheet>('GET', `/api/sheet?id=${encodeURIComponent(id)}`),
+  createSheet: (doc: Sheet) =>
+    request<{ sheet: StoredSheet; created: boolean }>('PUT', '/api/sheet', { id: doc.id, day: doc.day, season: doc.season, doc }),
+  sheetOps: (id: string, clientId: string, seq: number, ops: Op[]) =>
+    request<{ rev: number; seq: number }>('POST', '/api/sheet/ops', { id, clientId, seq, ops }),
 };

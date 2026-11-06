@@ -155,6 +155,7 @@ export interface PlayerCategory {
   minAge: number | null;
   maxAge: number | null;
   isGroup: boolean;
+  groupMembers: number[];
 }
 
 export interface MatchDef {

@@ -15,7 +15,8 @@ cargo test && pnpm check
 ## Architecture
 
 - `src/tabt.rs`: VTTL TabT SOAP client. One shared cache for all users (the key has no
-  credentials); concurrent requests for the same data share one HTTP call.
+  credentials); concurrent requests for the same data share one HTTP call; an expired entry is
+  served at once while it refreshes in the background.
 - `src/auth.rs`, `src/crypto.rs`: login with `Test` (`IsValidAccount`). The VTTL password is
   kept encrypted (ChaCha20-Poly1305) in the session row, because uploads need it. The browser
   only holds a random token in an HttpOnly cookie; the database keeps its SHA-256.
@@ -23,7 +24,22 @@ cargo test && pnpm check
 - `src/api.rs`: JSON API. Errors are `{ "error": code, "message": text }`.
 - `web/`: Svelte 5 + Vite client. It keeps the last data in local storage and shows it at once.
   A redirect or a non-JSON answer counts as "offline": the hall WiFi has a captive portal.
+- `src/sheets.rs`: match sheets. One JSON document per (club, sheet), changed with "set"
+  operations (last write wins per field). A batch carries a client id + sequence number, so a
+  retry after a lost answer is not applied twice. `/api/ws` pushes every change to the club.
+- `web/src/lib/sheet/`: the ScoreSheet rules in TypeScript (match systems, score, validations,
+  new sheet from VTTL), so they also work offline. Tests: `pnpm test`.
+- `web/src/lib/workspace.svelte.ts`: open sheets, the queue of unsent changes (kept in local
+  storage), sync and the WebSocket.
+- `web/public/sw.js`: service worker. It keeps the app on the device; a page without the
+  `x-vl-app` header (a captive-portal page) is replaced by the cached app.
 - `src/scoreboard.rs`: decoder for the ESP32 scoreboard (not linked yet).
+
+## Differences with ScoreSheet (on purpose)
+
+- An unfinished game (sets entered, not decided) counts as incomplete; ScoreSheet marks the next
+  empty box as an error while you type.
+- The optional Super substitute (V) may stay empty without a validation error.
 
 ## VTTL API facts (checked 2026-11-06)
 

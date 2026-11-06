@@ -55,6 +55,7 @@
   </p>
   {#if session.me?.account.member}
     <p>Nu gekozen: <strong>{session.me.account.memberName}</strong> ({session.me.account.club})</p>
+    <p><button class="ghost" onclick={() => navigate('/', true)}>← Terug naar de wedstrijdbladen</button></p>
   {/if}
   <!-- svelte-ignore a11y_autofocus -->
   <input class="search" placeholder="Familienaam of voornaam" bind:value={query} oninput={onInput} autofocus />

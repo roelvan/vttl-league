@@ -5,6 +5,7 @@ mod crypto;
 mod db;
 #[allow(dead_code)]
 mod scoreboard;
+mod sheets;
 mod tabt;
 mod xml;
 
@@ -38,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
         db: db::Db::open(&database)?,
         crypto: crypto::Crypto::load(var("SECRET_KEY").ok(), &data_dir.join("secret.key"))?,
         cookie_secure: var("COOKIE_SECURE").map(|v| v != "false").unwrap_or(!local),
+        events: tokio::sync::broadcast::channel(1024).0,
     });
 
     // The client is a single-page app: unknown paths get index.html.
@@ -57,6 +59,9 @@ async fn main() -> anyhow::Result<()> {
 async fn cache_headers(req: Request, next: Next) -> Response {
     let immutable = req.uri().path().starts_with("/assets/");
     let mut res = next.run(req).await;
+    // Marks answers from this server. The service worker uses it to tell our pages from a
+    // captive-portal login page that the hall WiFi sends instead.
+    res.headers_mut().insert("x-vl-app", HeaderValue::from_static("1"));
     if !res.headers().contains_key(header::CACHE_CONTROL) {
         let v = if immutable { "public, max-age=31536000, immutable" } else { "no-cache" };
         res.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static(v));

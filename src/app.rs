@@ -3,6 +3,7 @@
 use crate::crypto::Crypto;
 use crate::db::Db;
 use crate::tabt::Tabt;
+use tokio::sync::broadcast;
 
 pub struct App {
     pub tabt: Tabt,
@@ -10,4 +11,12 @@ pub struct App {
     pub crypto: Crypto,
     /// Send the session cookie with the `Secure` flag (off only for local http).
     pub cookie_secure: bool,
+    /// Changes for the browsers: (club, JSON message). Each WebSocket keeps its own club.
+    pub events: broadcast::Sender<(String, String)>,
+}
+
+impl App {
+    pub fn push(&self, club: &str, msg: serde_json::Value) {
+        let _ = self.events.send((club.to_string(), msg.to_string()));
+    }
 }

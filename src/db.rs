@@ -4,7 +4,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MIGRATIONS: &[&str] = &[
@@ -24,6 +24,8 @@ const MIGRATIONS: &[&str] = &[
         last_seen    INTEGER NOT NULL
      );
      CREATE INDEX session_account ON session(account);",
+    // 2: match sheets
+    crate::sheets::MIGRATION,
 ];
 
 /// Sessions end after this many seconds without use.
@@ -67,6 +69,10 @@ impl Db {
             tracing::info!("database migrated to version {}", i + 1);
         }
         Ok(Self { conn: Mutex::new(conn) })
+    }
+
+    pub fn conn(&self) -> MutexGuard<'_, Connection> {
+        self.conn.lock().unwrap()
     }
 
     pub fn create_session(&self, account: &str, token_hash: &str, secret: &str) -> Result<Account> {
