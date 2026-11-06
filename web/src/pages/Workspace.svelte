@@ -32,6 +32,8 @@
   loadMatches().catch(() => {});
   connect();
   scheduleFlush(0);
+  // Bring VTTL changes into the sheets that were left open (also older match days).
+  for (const id of ws.open) importFromVttl(id).catch(() => {});
 
   const active = $derived(ws.active && ws.active !== 'overview' ? ws.entries[ws.active] : null);
 
