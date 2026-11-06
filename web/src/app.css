@@ -293,3 +293,6 @@ main.center { min-height: 80vh; display: grid; place-items: center; }
 .seg { display: flex; }
 .seg button { flex: 1; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 0; font-weight: 400; }
 .seg button.on { background: var(--accent); color: var(--accent-text); }
+
+.credits { font-size: 0.85rem; color: var(--muted); margin: 0; }
+.credits a { color: inherit; text-decoration: underline; }

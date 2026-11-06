@@ -1,7 +1,12 @@
 # vttl-league
 
-Web version of ScoreSheet (the Windows match-sheet program for the Belgian table tennis
-competition), for VTTL clubs. Users log in with their own VTTL account.
+Een webappkloon van het programma [ScoreSheet](https://score.pieterp.be/) van PieterP.be:
+the Windows match-sheet program for the Belgian table tennis competition, rebuilt as a web app
+for VTTL clubs. Users log in with their own VTTL account.
+
+The ScoreSheet rules (match systems, scores, validations) are ported from its source code
+(© 2024 PieterP.be, BSD licence, see `NOTICE-ScoreSheet.md`). Thanks to the ScoreSheet team.
+This app is not an official product of PieterP.be or the VTTL.
 
 ```
 cp .env.example .env

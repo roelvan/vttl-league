@@ -13,6 +13,7 @@
   import { validate } from '../lib/sheet/validate';
   import { custom } from '../lib/sheet/create';
   import { todayIso } from '../lib/format';
+  import Credits from '../components/Credits.svelte';
 
   type DialogState =
     | { kind: 'matchday' }
@@ -126,6 +127,7 @@
           <strong>Database bijwerken</strong>
           <span>Haal de kalender, de clubs en de spelerscategorieën opnieuw op bij VTTL.{data.matches ? ` Nu: ${data.matches.matches.length} wedstrijden.` : ''}</span>
         </button>
+        <Credits />
       </div>
     {/if}
   </div>
@@ -161,8 +163,7 @@
   </Dialog>
 {:else if dialog?.kind === 'about'}
   <Dialog title="Over VTTL League" onclose={() => (dialog = null)}>
-    <p>Webversie van ScoreSheet voor de VTTL-competitie. De regels voor scores en validatie komen uit ScoreSheet (© PieterP.be).</p>
-    <p class="muted small">Gegevens: VTTL TabT API.</p>
+    <Credits long />
     {#snippet footer()}<button onclick={() => (dialog = null)}>OK</button>{/snippet}
   </Dialog>
 {/if}
