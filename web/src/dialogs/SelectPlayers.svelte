@@ -57,12 +57,20 @@
   let referee = $state<Pick>({ member: find(sheet.chiefReferee.computerNumber), placeholder: sheet.chiefReferee.name, wo: false, captain: false });
   let commissioner = $state<Pick>({ member: find(sheet.roomCommissioner.computerNumber), placeholder: sheet.roomCommissioner.name, wo: false, captain: false });
 
-  // Once the lists arrive, match the existing names again.
+  // Once the lists arrive, match the existing names again. Only the lists are tracked: reading
+  // the picks here would undo a "Leegmaken" (×) right away. A slot cleared by the user has no
+  // placeholder any more, so it is not filled again when the second list arrives.
   $effect(() => {
     if (!catList) return;
-    for (const [i, { player }] of singleSlots.entries()) if (!picks[i].member) picks[i].member = find(team.players[player]?.computerNumber ?? '');
-    if (!referee.member) referee.member = find(sheet.chiefReferee.computerNumber);
-    if (!commissioner.member) commissioner.member = find(sheet.roomCommissioner.computerNumber);
+    void allList;
+    untrack(() => {
+      for (const [i, { player }] of singleSlots.entries()) {
+        const p = picks[i];
+        if (!p.member && p.placeholder) p.member = find(team.players[player]?.computerNumber ?? '');
+      }
+      if (!referee.member && referee.placeholder) referee.member = find(sheet.chiefReferee.computerNumber);
+      if (!commissioner.member && commissioner.placeholder) commissioner.member = find(sheet.roomCommissioner.computerNumber);
+    });
   });
 
   /** The slot that a click in the list fills: 0..n-1 = players, 'ref', 'com'. */
