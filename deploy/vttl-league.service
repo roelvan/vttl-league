@@ -1,0 +1,28 @@
+[Unit]
+Description=vttl-league (competitie.ttczonnebeke.be)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=vttl-league
+Group=vttl-league
+WorkingDirectory=/var/lib/vttl-league
+EnvironmentFile=/etc/vttl-league.env
+ExecStart=/opt/vttl-league/vttl-league
+Restart=always
+RestartSec=2
+
+# Hardening: the app only writes to its data directory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/vttl-league
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

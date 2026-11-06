@@ -53,6 +53,22 @@ cargo test && pnpm check
   the screen CSS cannot leak in.
 - `src/scoreboard.rs`: decoder for the ESP32 scoreboard (not linked yet).
 
+## Deploy (https://competitie.ttczonnebeke.be)
+
+Server: `westtoer-directus` (Hetzner cax11, ARM64, Ubuntu 24.04), SSH only via Tailscale. It also
+runs nginx, mosquitto and Directus. No Docker: systemd runs the binary on 127.0.0.1:3100, nginx
+(certbot TLS) proxies to it. DNS: A record `competitie` in Cloudflare, DNS only (grey cloud).
+
+```sh
+sh deploy/deploy.sh          # build web/ here, build the binary on the server, restart
+sh deploy/setup.sh [--tls]   # one-time server setup (safe to run again)
+```
+
+- Binary + web files: `/opt/vttl-league` (previous release kept as `*.prev`, `REVISION` = commit).
+- Data: `/var/lib/vttl-league/vttl-league.sqlite`. Settings: `/etc/vttl-league.env` (secret key
+  made on the server). `UPLOAD_ENABLED=false` until the first real upload is tested.
+- Logs: `journalctl -u vttl-league -f`.
+
 ## Differences with ScoreSheet (on purpose)
 
 - An unfinished game (sets entered, not decided) counts as incomplete; ScoreSheet marks the next
