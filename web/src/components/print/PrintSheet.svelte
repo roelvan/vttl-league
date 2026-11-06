@@ -25,6 +25,9 @@
 </script>
 
 <div class="page landscape ps">
+  <!-- ScoreSheet keeps the top band for the VTTL sponsor image, which we do not print. The content
+       (4.19-28.45 cm wide, 5.19-20.25 cm high) is moved to the middle of the A4 page instead. -->
+  <div class="ps-content">
   {#if !sheet.isOfficial}<div class="ps-ps-unofficial">ONOFFICIEEL WEDSTRIJDBLAD</div>{/if}
 
   <div class="ps-box" style="left:4.19cm; top:5.19cm; width:6.15cm; height:2.32cm; display:flex">
@@ -148,10 +151,12 @@
     <div style="margin:0.05cm">Aansluitingsnummer: {sheet.roomCommissioner.computerNumber}</div>
   </div>
 </div>
+</div>
 
 <style>
   .ps { position: relative; font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
   .ps :global(*) { box-sizing: border-box; }
+  .ps-content { position: absolute; inset: 0; transform: translate(-1.47cm, -2.22cm); }
   .ps-abs, .ps-box { position: absolute; }
   .ps-box { border: 1px solid #000; }
   .ps-f25 { font-size: 0.25cm; }
