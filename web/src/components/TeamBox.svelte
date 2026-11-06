@@ -50,61 +50,54 @@
   const subGames = $derived(sys.games.filter((g) => g.allowSub));
 </script>
 
-<div class="team">
-  <div class="team-head">
-    <div class="team-id">
-      <label class="inline"><span>Ploeg</span>
-        <input class="ed name" value={team.name} disabled={locked} oninput={(e) => change(id, [{ p: [side, 'name'], v: val(e) }])} />
-      </label>
-      <label class="inline ff"><input type="checkbox" checked={team.forfeit} onchange={(e) => setForfeit((e.currentTarget as HTMLInputElement).checked)} /> FF</label>
-      <label class="inline"><span>Aanwijzingsnummer</span>
-        <input class="ed club" value={team.clubId} disabled={locked} oninput={(e) => change(id, [{ p: [side, 'clubId'], v: val(e) }])} />
-      </label>
-    </div>
-    <div class="cols" aria-hidden="true">
-      <span class="c-cn">Computer<br />nummer</span><span class="c-pos">Volg<br />num</span><span class="c-idx">Index</span><span class="c-rank">Klasse<br />ment</span><span class="c-win">Ind.<br />overw</span><span class="c-cap">Kapi-<br />tein</span>
-    </div>
+<!-- One grid for the header and the rows, so every header stays above its column. -->
+<div class="team tgrid">
+  <div class="team-id">
+    <label class="inline"><span>Ploeg</span>
+      <input class="ed name" value={team.name} disabled={locked} oninput={(e) => change(id, [{ p: [side, 'name'], v: val(e) }])} />
+    </label>
+    <label class="inline ff"><input type="checkbox" checked={team.forfeit} onchange={(e) => setForfeit((e.currentTarget as HTMLInputElement).checked)} /> FF</label>
+    <label class="inline"><span>Aanwijzingsnummer</span>
+      <input class="ed club" value={team.clubId} disabled={locked} oninput={(e) => change(id, [{ p: [side, 'clubId'], v: val(e) }])} />
+    </label>
   </div>
+  <span class="th">Computer<br />nummer</span><span class="th">Volg<br />num</span><span class="th">Index</span><span class="th">Klasse<br />ment</span><span class="th">Ind.<br />overw</span><span class="th">Kapi-<br />tein</span>
 
   {#each sys.slots as slot, si (si)}
     {#if slot.kind === 'single'}
       {@const p = team.players[slot.player]}
       {#if p}
-        <div class="prow">
-          <span class="pl">{slotLabel(sys, si, side === 'away')}</span>
-          <input class="ed pname" value={p.name} aria-label="Naam speler {slot.label}" oninput={(e) => setPlayer(slot.player, 'name', val(e))} />
-          <button class="dots" title="Spelers kiezen" onclick={onbrowse}>…</button>
-          <input class="ed c-cn" value={p.computerNumber} aria-label="Computernummer" oninput={(e) => setPlayer(slot.player, 'computerNumber', val(e))} />
-          <input class="ed c-pos" value={p.position} aria-label="Volgnummer" oninput={(e) => setPlayer(slot.player, 'position', val(e))} />
-          <input class="ed c-idx" value={p.index} aria-label="Index" oninput={(e) => setPlayer(slot.player, 'index', val(e))} />
-          <input class="ed c-rank" value={p.ranking} aria-label="Klassement" oninput={(e) => setPlayer(slot.player, 'ranking', val(e))} />
-          <span class="c-win">{individual[si]}</span>
-          <input class="c-cap" type="checkbox" checked={p.captain} aria-label="Kapitein" onchange={(e) => setCaptain(slot.player, (e.currentTarget as HTMLInputElement).checked)} />
-        </div>
+        <span class="pl">{slotLabel(sys, si, side === 'away')}</span>
+        <input class="ed" value={p.name} aria-label="Naam speler {slot.label}" oninput={(e) => setPlayer(slot.player, 'name', val(e))} />
+        <button class="dots" title="Spelers kiezen" onclick={onbrowse}>…</button>
+        <input class="ed num" value={p.computerNumber} aria-label="Computernummer" oninput={(e) => setPlayer(slot.player, 'computerNumber', val(e))} />
+        <input class="ed num" value={p.position} aria-label="Volgnummer" oninput={(e) => setPlayer(slot.player, 'position', val(e))} />
+        <input class="ed num" value={p.index} aria-label="Index" oninput={(e) => setPlayer(slot.player, 'index', val(e))} />
+        <input class="ed num" value={p.ranking} aria-label="Klassement" oninput={(e) => setPlayer(slot.player, 'ranking', val(e))} />
+        <span class="win">{individual[si]}</span>
+        <input class="cap" type="checkbox" checked={p.captain} aria-label="Kapitein" onchange={(e) => setCaptain(slot.player, (e.currentTarget as HTMLInputElement).checked)} />
       {/if}
     {:else if slot.kind === 'double'}
-      <div class="prow">
-        <span class="dl">Dubbel:</span>
-        <select class="ed dsel" value={team.doubles[slot.double] ?? slot.options[0]} onchange={(e) => change(id, [{ p: [side, 'doubles', slot.double], v: (e.currentTarget as HTMLSelectElement).value }])}>
-          {#each slot.options as o (o)}<option>{o}</option>{/each}
-        </select>
-        <span class="c-win">{individual[si]}</span>
-      </div>
+      <span class="dl">Dubbel:</span>
+      <select class="ed span-sel" value={team.doubles[slot.double] ?? slot.options[0]} onchange={(e) => change(id, [{ p: [side, 'doubles', slot.double], v: (e.currentTarget as HTMLSelectElement).value }])}>
+        {#each slot.options as o (o)}<option>{o}</option>{/each}
+      </select>
+      <span class="win">{individual[si]}</span>
+      <span></span>
     {:else}
-      <div class="prow">
-        <span class="dl">Wissel:</span>
-        <select
-          class="ed dsel"
-          value={team.substitutes[slot.sub] ?? ''}
-          onchange={(e) => {
-            const v = (e.currentTarget as HTMLSelectElement).value;
-            change(id, [{ p: [side, 'substitutes', slot.sub], v: v === '' ? null : Number(v) }]);
-          }}
-        >
-          <option value="">Geen wissel</option>
-          {#each subGames as g (g.pos)}<option value={g.pos}>Wissel in match #{g.pos}</option>{/each}
-        </select>
-      </div>
+      <span class="dl">Wissel:</span>
+      <select
+        class="ed span-sel"
+        value={team.substitutes[slot.sub] ?? ''}
+        onchange={(e) => {
+          const v = (e.currentTarget as HTMLSelectElement).value;
+          change(id, [{ p: [side, 'substitutes', slot.sub], v: v === '' ? null : Number(v) }]);
+        }}
+      >
+        <option value="">Geen wissel</option>
+        {#each subGames as g (g.pos)}<option value={g.pos}>Wissel in match #{g.pos}</option>{/each}
+      </select>
+      <span></span><span></span>
     {/if}
   {/each}
 </div>

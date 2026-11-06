@@ -185,7 +185,7 @@ main.center { min-height: 80vh; display: grid; place-items: center; }
 .ov-meta { color: var(--muted); font-size: 0.85rem; }
 
 /* ------------------------------------------------------------------ the sheet */
-.sheet { position: relative; padding: 0 0 16px; color: var(--sheet-text); background: var(--sheet-bg); min-height: 100%; min-width: max-content; }
+.sheet { color-scheme: light; accent-color: #365f91; position: relative; padding: 0 0 16px; color: var(--sheet-text); background: var(--sheet-bg); min-height: 100%; min-width: max-content; }
 .watermark { position: absolute; right: 2%; top: 30%; font-size: 360px; font-weight: 800; opacity: 0.08; pointer-events: none; color: #000; line-height: 1; }
 .sheet .row { display: flex; flex-wrap: wrap; align-items: flex-start; }
 .box { border: 1px solid var(--sheet-line); margin: 10px; padding: 5px; }
@@ -210,26 +210,22 @@ main.center { min-height: 80vh; display: grid; place-items: center; }
 .minfo .hour { width: 70px; }
 
 .teams { display: grid; }
-.team-head { display: flex; align-items: flex-end; gap: 4px; margin-bottom: 4px; }
-.team-id { display: grid; grid-template-columns: auto auto; gap: 3px 8px; width: 310px; align-items: center; }
-.team-id > :last-child { grid-column: span 2; }
-.team-id .name { width: 190px; }
-.team-id .club { width: 120px; }
-.team-id .ff { font-weight: 700; }
-.team-id label span { min-width: 45px; }
-.cols { display: flex; gap: 2px; font-size: 9px; text-align: center; line-height: 1.1; }
-.prow { display: flex; align-items: center; gap: 2px; margin: 1px 0; }
-.pl { width: 22px; text-align: center; }
-.pname { width: 250px; }
-.c-cn { width: 66px; text-align: center; }
-.c-pos { width: 32px; text-align: center; }
-.c-idx, .c-rank, .c-win { width: 36px; text-align: center; }
-.c-cap { width: 22px; }
-.cols .c-cn { margin-left: 24px; }
-.prow .c-win { font-size: 13px; }
-.dl { width: 60px; padding-left: 3px; }
-.dsel { width: 220px; }
-
+/* TeamBox: label | name | … | computer nr | volgnr | index | klassement | ind. overw | kapitein */
+.tgrid { display: grid; grid-template-columns: 22px minmax(220px, 1fr) 22px 70px 40px 40px 44px 44px 32px; gap: 2px; align-items: center; }
+.tgrid .team-id { grid-column: 1 / 4; display: grid; grid-template-columns: auto auto; gap: 3px 8px; align-items: center; margin-bottom: 4px; }
+.tgrid .team-id > :last-child { grid-column: span 2; }
+.tgrid .team-id .name { width: 190px; }
+.tgrid .team-id .club { width: 120px; }
+.tgrid .team-id .ff { font-weight: 700; }
+.tgrid .team-id label span { min-width: 45px; }
+.tgrid .th { align-self: end; font-size: 9px; text-align: center; line-height: 1.15; padding-bottom: 4px; }
+.tgrid input.ed { width: 100%; min-width: 0; }
+.tgrid input.num { text-align: center; }
+.tgrid .pl, .tgrid .win { text-align: center; }
+.tgrid .win { font-size: 13px; }
+.tgrid .cap { justify-self: center; }
+.tgrid .dl { grid-column: 1 / 3; padding-left: 3px; }
+.tgrid .span-sel { grid-column: 3 / 8; }
 .scores { display: grid; }
 .a632 { margin: 0 10px; gap: 6px; flex-wrap: wrap; }
 
