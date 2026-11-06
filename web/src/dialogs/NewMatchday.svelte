@@ -7,6 +7,18 @@
   import { fromVttl } from '../lib/sheet/create';
   import { longDate, shortDate, todayIso, byTeam } from '../lib/format';
   import type { MatchRow } from '../lib/types';
+  import { ws } from '../lib/workspace.svelte';
+  import { getSystem } from '../lib/sheet/systems';
+  import { vttlStatus } from '../lib/sheet/vttl';
+  import VttlIcon from '../components/VttlIcon.svelte';
+
+  /** The sheet state when this device has the sheet, else what the VTTL row says. */
+  function statusOf(m: MatchRow) {
+    const s = ws.entries[m.matchId]?.view;
+    if (s) return vttlStatus(s, getSystem(s.matchSystemId));
+    if (m.isValidated || m.isLocked) return 'locked' as const;
+    return m.score ? ('played' as const) : null;
+  }
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -95,9 +107,11 @@
         <ul>
           {#each chosen as m (m.matchId)}
             <li>
+              <VttlIcon status={statusOf(m)} />
               <span class="mono muted">{m.matchId}</span>
               <span class="muted">{m.time}</span>
               <span class:mine={m.isHome}>{m.homeTeam}</span> – <span class:mine={!m.isHome}>{m.awayTeam}</span>
+              {#if m.score}<b>{m.score}</b>{/if}
             </li>
           {/each}
         </ul>

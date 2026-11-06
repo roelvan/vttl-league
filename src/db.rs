@@ -26,6 +26,19 @@ const MIGRATIONS: &[&str] = &[
      CREATE INDEX session_account ON session(account);",
     // 2: match sheets
     crate::sheets::MIGRATION,
+    // 3: every upload to VTTL (also dry runs), for support and the status icons
+    "CREATE TABLE upload(
+        club       TEXT NOT NULL,
+        id         TEXT NOT NULL,
+        at         INTEGER NOT NULL,
+        account    TEXT NOT NULL,
+        partial    INTEGER NOT NULL,
+        dry_run    INTEGER NOT NULL,
+        ok         INTEGER NOT NULL,
+        data       TEXT NOT NULL,
+        errors     TEXT NOT NULL
+     );
+     CREATE INDEX upload_sheet ON upload(club, id, at);",
 ];
 
 /// Sessions end after this many seconds without use.
@@ -144,6 +157,18 @@ fn account_row(c: &Connection, account: &str) -> Result<Option<Account>> {
         |r| Ok(Account { account: r.get(0)?, member: r.get(1)?, member_name: r.get(2)?, club: r.get(3)? }),
     )
     .optional()?)
+}
+
+impl Db {
+    #[allow(clippy::too_many_arguments)]
+    pub fn log_upload(&self, club: &str, id: &str, account: &str, partial: bool, dry_run: bool, ok: bool, data: &str, errors: &[String]) -> Result<()> {
+        let c = self.conn();
+        c.execute(
+            "INSERT INTO upload(club, id, at, account, partial, dry_run, ok, data, errors) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![club, id, now(), account, partial, dry_run, ok, data, serde_json::to_string(errors)?],
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

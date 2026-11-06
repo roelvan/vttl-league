@@ -4,7 +4,7 @@
   import { logout } from '../lib/session.svelte';
   import { navigate } from '../lib/router.svelte';
 
-  let { onaction }: { onaction: (a: 'matchday' | 'custom' | 'validate' | 'about') => void } = $props();
+  let { onaction }: { onaction: (a: 'matchday' | 'custom' | 'validate' | 'about' | 'upload' | 'import') => void } = $props();
 
   let open = $state<string | null>(null);
   const toggle = (m: string) => (e: MouseEvent) => {
@@ -38,7 +38,8 @@
         <button role="menuitem" disabled={!sheetOpen} onclick={() => onaction('validate')}>Valideer</button>
         <button role="menuitem" disabled title="Komt in fase 3">Printen <kbd>Ctrl+P</kbd></button>
         <button role="menuitem" disabled title="Komt in fase 4">Exporteer wedstrijden</button>
-        <button role="menuitem" disabled title="Komt in fase 4">Upload naar competitiewebsite</button>
+        <button role="menuitem" disabled={!ws.open.length} onclick={() => onaction('upload')}>Upload naar competitiewebsite</button>
+        <button role="menuitem" disabled={!ws.open.length} onclick={() => onaction('import')}>Gegevens ophalen bij VTTL</button>
         <hr />
         <button role="menuitem" onclick={logout}>Afmelden</button>
       </div>
@@ -55,6 +56,14 @@
         <button role="menuitemcheckbox" aria-checked={settings.showResultsInNav} onclick={() => { settings.showResultsInNav = !settings.showResultsInNav; saveSettings(); }}>
           <span class="chk">{settings.showResultsInNav ? '✓' : ''}</span> Uitslag tonen in de navigatie
         </button>
+        <hr />
+        <span class="mb-label">Live-updates naar VTTL tijdens de match</span>
+        {#each [['on', 'Aan'], ['super', 'Enkel voor Super'], ['off', 'Uit']] as [v, l] (v)}
+          <button role="menuitemradio" aria-checked={settings.liveUpdates === v} onclick={() => { settings.liveUpdates = v as 'on'; saveSettings(); }}>
+            <span class="chk">{settings.liveUpdates === v ? '●' : ''}</span> {l}
+          </button>
+        {/each}
+        <hr />
         <button role="menuitem" onclick={() => navigate('/ik')}>Wie ben ik? (club wijzigen)</button>
       </div>
     {/if}

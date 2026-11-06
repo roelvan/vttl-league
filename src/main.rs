@@ -40,7 +40,11 @@ async fn main() -> anyhow::Result<()> {
         crypto: crypto::Crypto::load(var("SECRET_KEY").ok(), &data_dir.join("secret.key"))?,
         cookie_secure: var("COOKIE_SECURE").map(|v| v != "false").unwrap_or(!local),
         events: tokio::sync::broadcast::channel(1024).0,
+        upload_enabled: var("UPLOAD_ENABLED").is_ok_and(|v| v == "true"),
     });
+    if app.upload_enabled {
+        tracing::warn!("UPLOAD_ENABLED=true: uploads change the LIVE VTTL database");
+    }
 
     // The client is a single-page app: unknown paths get index.html.
     let static_files = ServeDir::new(&web_dir).fallback(ServeFile::new(web_dir.join("index.html")));

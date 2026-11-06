@@ -7,6 +7,8 @@
   import TeamBox from './TeamBox.svelte';
   import ScoreGrid from './ScoreGrid.svelte';
   import PersonBox from './PersonBox.svelte';
+  import VttlIcon from './VttlIcon.svelte';
+  import { vttlStatus, STATUS_TEXT } from '../lib/sheet/vttl';
 
   let { id, sheet, onbrowse }: { id: string; sheet: Sheet; onbrowse: (side: 'home' | 'away') => void } = $props();
 
@@ -18,6 +20,9 @@
     const last = sheet.home.name.trim().split(' ').at(-1) ?? '';
     return last.length === 1 ? last.toUpperCase() : '';
   });
+
+  const status = $derived(sheet.isOfficial ? vttlStatus(sheet, sys) : null);
+  const time = (ms: number) => new Date(ms).toLocaleString('nl-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   const val = (e: Event) => (e.currentTarget as HTMLInputElement).value;
   const text = (field: string) => (e: Event) => change(id, [{ p: [field], v: val(e) }]);
@@ -39,8 +44,12 @@
   ];
 </script>
 
+{#if sheet.vttlLocked}
+  <div class="locked-banner"><VttlIcon status="locked" /> Gevalideerd door VTTL: dit wedstrijdblad toont de officiële uitslag en kan niet meer gewijzigd worden.</div>
+{/if}
 <div class="sheet" style:zoom={settings.zoom}>
   {#if watermark}<div class="watermark" aria-hidden="true">{watermark}</div>{/if}
+  <fieldset disabled={!!sheet.vttlLocked}>
 
   <div class="row">
     <section class="box address">
@@ -94,6 +103,12 @@
         <input type="checkbox" checked={sheet.article632} onchange={(e) => change(id, [{ p: ['article632'], v: (e.currentTarget as HTMLInputElement).checked }])} />
         <b>ja</b> (artikel 6.32)
       </label>
+      {#if status}
+        <p class="upload-info">
+          <VttlIcon {status} />
+          {STATUS_TEXT[status]}{#if sheet.upload}. Laatste upload: {time(sheet.upload.at)}{sheet.upload.partial ? ' (tussenstand)' : ''}{sheet.upload.dryRun ? ' – proef, niet naar VTTL gestuurd' : ''}{!sheet.upload.ok ? ` – mislukt: ${sheet.upload.errors.join('; ')}` : ''}{/if}
+        </p>
+      {/if}
     </div>
   </div>
 
@@ -111,4 +126,5 @@
       <PersonBox {id} field="roomCommissioner" title="ZAALCOMMISSARIS" person={sheet.roomCommissioner} onbrowse={() => onbrowse('home')} />
     {/if}
   </div>
+  </fieldset>
 </div>

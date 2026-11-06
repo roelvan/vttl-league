@@ -102,6 +102,8 @@ export const api = {
   sheet: (id: string) => request<StoredSheet>('GET', `/api/sheet?id=${encodeURIComponent(id)}`),
   createSheet: (doc: Sheet) =>
     request<{ sheet: StoredSheet; created: boolean }>('PUT', '/api/sheet', { id: doc.id, day: doc.day, season: doc.season, doc }),
+  upload: (id: string, data: string, partial: boolean) =>
+    request<{ ok: boolean; dryRun: boolean; errors: string[] }>('POST', '/api/upload', { id, data, partial }),
   sheetOps: (id: string, clientId: string, seq: number, ops: Op[]) =>
     request<{ rev: number; seq: number }>('POST', '/api/sheet/ops', { id, clientId, seq, ops }),
 };

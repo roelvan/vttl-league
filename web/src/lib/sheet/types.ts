@@ -92,6 +92,22 @@ export interface Sheet {
 
   /** Set after the first full upload; live partial uploads stop then. */
   disablePartialUpload?: boolean;
+
+  /** Last VTTL value seen per field (see vttl.ts `canonical`), for the two-way sync. */
+  vttlSeen?: Record<string, string>;
+  /** VTTL validated or locked the result: the sheet is read-only. */
+  vttlLocked?: boolean;
+  /** The last upload (or dry run) of this sheet. */
+  upload?: UploadInfo;
+}
+
+export interface UploadInfo {
+  at: number;
+  by: string;
+  ok: boolean;
+  partial: boolean;
+  dryRun: boolean;
+  errors: string[];
 }
 
 export const emptyPlayer = (): SheetPlayer => ({ name: '', computerNumber: '', position: '', index: '', ranking: '', captain: false });

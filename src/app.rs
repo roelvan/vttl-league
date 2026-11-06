@@ -11,6 +11,8 @@ pub struct App {
     pub crypto: Crypto,
     /// Send the session cookie with the `Secure` flag (off only for local http).
     pub cookie_secure: bool,
+    /// Real uploads to VTTL. Off (dry run) unless UPLOAD_ENABLED=true: VTTL has no test database.
+    pub upload_enabled: bool,
     /// Changes for the browsers: (club, JSON message). Each WebSocket keeps its own club.
     pub events: broadcast::Sender<(String, String)>,
 }

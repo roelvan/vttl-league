@@ -28,6 +28,8 @@ export interface Me {
   account: Account;
   club: Club | null;
   currentSeason: number | null;
+  /** false = dry run: uploads are only logged on the server. */
+  uploadEnabled: boolean;
 }
 
 export interface Member {

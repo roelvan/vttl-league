@@ -87,6 +87,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/sheet", get(sheets::get_one).put(sheets::create))
         .route("/api/sheet/ops", post(sheets::ops))
         .route("/api/ws", get(sheets::ws))
+        .route("/api/upload", post(upload))
         .with_state(app)
 }
 
@@ -150,7 +151,7 @@ async fn me_body(app: &App, creds: &Creds, acc: &Account) -> Value {
         (Some(c), Some(s)) => app.tabt.club(creds, s, c).await.ok().flatten(),
         _ => None,
     };
-    json!({ "account": acc, "club": club, "currentSeason": season })
+    json!({ "account": acc, "club": club, "currentSeason": season, "uploadEnabled": app.upload_enabled })
 }
 
 async fn me(State(app): State<Arc<App>>, u: User) -> R<Value> {
@@ -391,6 +392,47 @@ async fn player_categories(State(app): State<Arc<App>>, u: User, Query(q): Query
 
 async fn match_systems(State(app): State<Arc<App>>, u: User) -> R<Vec<tabt::MatchSystem>> {
     Ok(Json(app.tabt.match_systems(&u.creds).await.map_err(ApiError::vttl)?))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadBody {
+    /// Sheet id, for the log and the push to the other devices.
+    id: String,
+    /// TabT upload file (C header + I lines), built by the client (web/src/lib/sheet/export.ts).
+    data: String,
+    partial: bool,
+}
+
+/// Sends a result to VTTL with the credentials of the user, or only logs it in dry-run mode.
+/// VTTL checks the rights itself (fault 22 = no permission for this club).
+async fn upload(State(app): State<Arc<App>>, u: User, Json(b): Json<UploadBody>) -> R<Value> {
+    let club = u.club()?.to_string();
+    if b.data.len() > 64 * 1024 || !b.data.lines().any(|l| l.starts_with("I;")) {
+        return Err(ApiError::BadRequest("Ongeldig uploadbestand".into()));
+    }
+    let dry_run = !app.upload_enabled;
+    let (ok, errors) = if dry_run {
+        (true, vec![])
+    } else {
+        match app.tabt.upload(&u.creds, &b.data).await {
+            Ok((ok, lines)) => (ok, lines),
+            Err(e) => match e.downcast_ref::<crate::xml::Fault>() {
+                Some(f) if f.code == "22" => (false, vec![format!("Geen uploadrechten voor deze club (VTTL-fout 22: {})", f.message)]),
+                Some(f) => (false, vec![format!("VTTL-fout {}: {}", f.code, f.message)]),
+                None => return Err(ApiError::vttl(e)),
+            },
+        }
+    };
+    app.db.log_upload(&club, &b.id, &u.account.account, b.partial, dry_run, ok, &b.data, &errors)?;
+    tracing::info!(club = %club, id = %b.id, partial = b.partial, dry_run, ok, "upload");
+    if ok && !dry_run {
+        // The next read must show what we just sent.
+        app.tabt.invalidate(&club);
+        app.tabt.invalidate(&club.replace('-', ""));
+    }
+    app.push(&club, json!({ "type": "upload", "id": b.id, "ok": ok, "dryRun": dry_run, "partial": b.partial }));
+    Ok(Json(json!({ "ok": ok, "dryRun": dry_run, "errors": errors })))
 }
 
 /// "ROEL" -> "Roel", "JEAN-PIERRE" -> "Jean-Pierre".

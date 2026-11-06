@@ -6,11 +6,12 @@
   import Dialog from '../dialogs/Dialog.svelte';
   import NewMatchday from '../dialogs/NewMatchday.svelte';
   import SelectPlayers from '../dialogs/SelectPlayers.svelte';
-  import { ws, openSheets, activate, connect, scheduleFlush } from '../lib/workspace.svelte';
-  import { data, loadCategories, loadClubs, loadMatches, members, clubExists, defaultCategory } from '../lib/data.svelte';
+  import { ws, openSheets, activate, connect, scheduleFlush, importFromVttl } from '../lib/workspace.svelte';
+  import { data, loadCategories, loadClubs, loadMatches, defaultCategory } from '../lib/data.svelte';
   import { getSystem, SYSTEMS } from '../lib/sheet/systems';
   import { computeScore } from '../lib/sheet/score';
-  import { validate } from '../lib/sheet/validate';
+  import { validateSheet } from '../lib/validation';
+  import UploadDialog from '../dialogs/UploadDialog.svelte';
   import { custom } from '../lib/sheet/create';
   import { todayIso } from '../lib/format';
   import Credits from '../components/Credits.svelte';
@@ -19,6 +20,7 @@
     | { kind: 'matchday' }
     | { kind: 'custom' }
     | { kind: 'about' }
+    | { kind: 'upload' }
     | { kind: 'players'; id: string; side: 'home' | 'away' }
     | { kind: 'validate'; id: string; errors: string[] }
     | null;
@@ -35,20 +37,14 @@
 
   function runValidation(id: string) {
     const s = ws.entries[id]?.view;
-    if (!s) return;
-    const sys = getSystem(s.matchSystemId);
-    const errors = validate(s, sys, {
-      today: new Date(),
-      members,
-      clubExists,
-      defaultCategory: defaultCategory(),
-      sameDay: Object.values(ws.entries).map((e) => e.view).filter((o) => o.day === s.day),
-      systemOf: getSystem,
-    });
-    dialog = { kind: 'validate', id, errors };
+    if (s) dialog = { kind: 'validate', id, errors: validateSheet(s) };
   }
 
-  function onaction(a: 'matchday' | 'custom' | 'validate' | 'about') {
+  function onaction(a: 'matchday' | 'custom' | 'validate' | 'about' | 'upload' | 'import') {
+    if (a === 'import') {
+      for (const id of ws.open) importFromVttl(id).catch((e) => (ws.message = `VTTL ophalen mislukt: ${e.message}`));
+      return;
+    }
     if (a === 'validate') {
       if (ws.active && ws.active !== 'overview') runValidation(ws.active);
     } else dialog = { kind: a };
@@ -161,6 +157,8 @@
       <button onclick={makeCustom}>OK</button>
     {/snippet}
   </Dialog>
+{:else if dialog?.kind === 'upload'}
+  <UploadDialog onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'about'}
   <Dialog title="Over VTTL League" onclose={() => (dialog = null)}>
     <Credits long />

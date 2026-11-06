@@ -38,6 +38,14 @@ cargo test && pnpm check
   storage), sync and the WebSocket.
 - `web/public/sw.js`: service worker. It keeps the app on the device; a page without the
   `x-vl-app` header (a captive-portal page) is replaced by the cached app.
+- `web/src/lib/sheet/export.ts`: TabT upload lines, a port of ScoreSheet's CsvExporter (with its
+  test cases). `POST /api/upload` sends them with the user's credentials; dry run unless
+  `UPLOAD_ENABLED=true`. Every upload is logged in the `upload` table.
+- `web/src/lib/sheet/vttl.ts`: two-way sync. Sheet and VTTL are compared as one key -> text map.
+  A VTTL value wins when it is new or changed since the last import (`vttlSeen`); an unchanged
+  or empty VTTL value never overwrites a local edit. Import on open and every 5 minutes for
+  sheets of today/yesterday. Live partial uploads follow ScoreSheet's LiveUpdateService.
+  Validated/locked on VTTL = read-only. The status icon (✓ ↑ ! 🔒) compares sheet and `vttlSeen`.
 - `src/scoreboard.rs`: decoder for the ESP32 scoreboard (not linked yet).
 
 ## Differences with ScoreSheet (on purpose)

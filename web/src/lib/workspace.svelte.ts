@@ -15,6 +15,11 @@ import type { Sheet } from './sheet/types';
 import { getSystem } from './sheet/systems';
 import { computeScore, isByeClub } from './sheet/score';
 import { session } from './session.svelte';
+import { settings } from './settings.svelte';
+import { importOps, uploadOps } from './sheet/vttl';
+import { exportCsv } from './sheet/export';
+import { data, loadMembers, defaultCategory, clubName, memberKey } from './data.svelte';
+import type { Member } from './types';
 
 interface Batch {
   client: string | null;
@@ -112,33 +117,39 @@ function adopt(e: Entry, s: StoredSheet) {
 
 // ---------------------------------------------------------------- local changes
 
-/** Applies a local change at once and queues it for the server. */
-export function change(id: string, ops: Op[]) {
+/**
+ * Applies a change at once and queues it for the server.
+ * `source: 'vttl'` = an import: no automatic end hour and no live upload.
+ */
+export function change(id: string, ops: Op[], source: 'user' | 'vttl' = 'user') {
   const e = ws.entries[id];
   if (!e || !ops.length) return;
-  const before = completeResult(e.view);
+  const before = teamScore(e.view);
   for (const op of ops) setAt(e.view, op.p, op.v);
   const last = e.pending.at(-1);
   if (last && last.seq === null) last.ops.push(...ops);
   else e.pending.push({ client: null, seq: null, ops: [...ops] });
-
-  // ScoreSheet fills in the end hour when the result becomes complete.
-  if (!before && completeResult(e.view) && !e.view.endHour && !isByeClub(e.view.home.clubId) && !isByeClub(e.view.away.clubId)) {
-    const now = new Date();
-    const hh = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    change(id, [{ p: ['endHour'], v: hh }]);
-    return;
-  }
   persist();
   scheduleFlush(100);
+  if (source !== 'user') return;
+
+  const after = teamScore(e.view);
+  // ScoreSheet fills in the end hour when the result becomes complete.
+  if (!before.complete && after.complete && !e.view.endHour && !isByeClub(e.view.home.clubId) && !isByeClub(e.view.away.clubId)) {
+    const now = new Date();
+    const hh = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    change(id, [{ p: ['endHour'], v: hh }], 'vttl');
+  }
+  // ScoreSheet LiveUpdateService: upload when the team score changes.
+  if (before.home !== after.home || before.away !== after.away) scheduleLive(id);
 }
 
-function completeResult(s: Sheet) {
+function teamScore(s: Sheet) {
   try {
-    const w = computeScore(s, getSystem(s.matchSystemId)).winner;
-    return w !== 'error' && w !== 'incomplete';
+    const sc = computeScore(s, getSystem(s.matchSystemId));
+    return { home: sc.homeWins, away: sc.awayWins, complete: sc.winner !== 'error' && sc.winner !== 'incomplete' };
   } catch {
-    return false;
+    return { home: 0, away: 0, complete: false };
   }
 }
 
@@ -161,6 +172,7 @@ export function openSheets(sheets: { stored?: StoredSheet; local?: Sheet }[], ac
   if (activate && sheets.length) ws.active = sheets[0].stored?.id ?? sheets[0].local!.id;
   persist();
   scheduleFlush(0);
+  for (const s of sheets) importFromVttl(s.stored?.id ?? s.local!.id).catch(() => {});
 }
 
 /** Tiles from best team to worst: A, B, C … (the letter of our own team), then by hour. */
@@ -361,3 +373,97 @@ addEventListener('online', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') scheduleFlush(0);
 });
+
+
+// ---------------------------------------------------------------- VTTL: import
+
+const memberIn = (club: string, category: number, id: number): Member | undefined =>
+  data.members[memberKey(club, category)]?.find((m) => m.uniqueIndex === id);
+
+/** Brings new or changed VTTL data into one sheet (see sheet/vttl.ts). */
+export async function importFromVttl(id: string) {
+  const e = ws.entries[id];
+  if (!e || !e.view.isOfficial) return;
+  const s = e.view;
+  const m = await api.match(s.matchId, s.season || undefined);
+  const sys = getSystem(s.matchSystemId);
+  const def = defaultCategory();
+  // Strength lists, for the position and index that VTTL does not give.
+  await Promise.allSettled(
+    [s.home.clubId, s.away.clubId].filter((c) => c && !isByeClub(c)).flatMap((c) => [loadMembers(c, s.playerCategory), loadMembers(c, def)]),
+  );
+  const cur = ws.entries[id]?.view;
+  if (!cur) return;
+  const ops = importOps(cur, sys, m, {
+    member: (club, n) => memberIn(club, cur.playerCategory, n) ?? memberIn(club, def, n),
+    clubName,
+  });
+  if (ops.length) {
+    change(id, ops, 'vttl');
+    ws.message = `Gegevens van VTTL binnengehaald voor ${cur.home.name} – ${cur.away.name}`;
+  }
+}
+
+const isRecent = (day: string) => {
+  const d = new Date(day + 'T12:00:00');
+  const diff = (Date.now() - d.getTime()) / 86400000;
+  return diff > -1 && diff < 2; // today or yesterday
+};
+
+/** ScoreSheet checks away matches every 5 minutes; we check every open sheet of today/yesterday. */
+setInterval(() => {
+  for (const id of ws.open) {
+    const s = ws.entries[id]?.view;
+    if (s && isRecent(s.day)) importFromVttl(id).catch(() => {});
+  }
+}, 5 * 60 * 1000);
+
+// ---------------------------------------------------------------- VTTL: upload
+
+export interface UploadResult {
+  ok: boolean;
+  dryRun: boolean;
+  errors: string[];
+  data: string;
+}
+
+/** Uploads one sheet (full or partial) and records the result in the sheet. */
+export async function uploadSheet(id: string, partial = false): Promise<UploadResult> {
+  const s = $state.snapshot(ws.entries[id].view) as Sheet;
+  const sys = getSystem(s.matchSystemId);
+  const csv = exportCsv([{ sheet: s, sys }], partial);
+  const r = await api.upload(id, csv, partial);
+  change(id, uploadOps(s, sys, { at: Date.now(), by: session.me?.account.account ?? '', ok: r.ok, partial, dryRun: r.dryRun, errors: r.errors }), 'vttl');
+  return { ...r, data: csv };
+}
+
+const liveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const liveBusy = new Set<string>();
+
+function scheduleLive(id: string) {
+  clearTimeout(liveTimers.get(id));
+  liveTimers.set(id, setTimeout(() => liveUpload(id), 1500));
+}
+
+/** ScoreSheet LiveUpdateService rules. */
+async function liveUpload(id: string) {
+  const s = ws.entries[id]?.view;
+  if (!s || !session.online || settings.liveUpdates === 'off') return;
+  if (settings.liveUpdates === 'super' && s.level !== 'super') return;
+  const sys = getSystem(s.matchSystemId);
+  if (!s.isOfficial || !sys.competitive || s.disablePartialUpload || s.vttlLocked) return;
+  // A complete result is never sent as a live update: people would think it was the real upload.
+  if (teamScore(s).complete) return;
+  if (liveBusy.has(id)) return scheduleLive(id);
+  liveBusy.add(id);
+  try {
+    const r = await uploadSheet(id, true);
+    ws.message = r.ok
+      ? `Tussenstand ${r.dryRun ? '(proef) ' : ''}naar VTTL gestuurd (${new Date().toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })})`
+      : `Tussenstand naar VTTL mislukt: ${r.errors.join('; ')}`;
+  } catch {
+    // Offline: ScoreSheet does not retry a live update either; the next score change sends it.
+  } finally {
+    liveBusy.delete(id);
+  }
+}

@@ -10,9 +10,11 @@ interface Settings {
   /** Also open byes of that week. */
   openByes: boolean;
   zoom: number;
+  /** Live partial uploads to VTTL while the match is played (ScoreSheet: on). */
+  liveUpdates: 'on' | 'super' | 'off';
 }
 
-const defaults: Settings = { protectMatchInfo: true, showResultsInNav: true, openAway: false, openByes: false, zoom: 1 };
+const defaults: Settings = { protectMatchInfo: true, showResultsInNav: true, openAway: false, openByes: false, zoom: 1, liveUpdates: 'on' };
 
 function load(): Settings {
   try {

@@ -3,6 +3,8 @@
   import { settings } from '../lib/settings.svelte';
   import { getSystem } from '../lib/sheet/systems';
   import { computeScore } from '../lib/sheet/score';
+  import { vttlStatus } from '../lib/sheet/vttl';
+  import VttlIcon from './VttlIcon.svelte';
 
   let { onvalidate }: { onvalidate: (id: string) => void } = $props();
 
@@ -36,12 +38,13 @@
       <button
         class="tile"
         class:active={ws.active === id}
-        class:uploaded={s.disablePartialUpload}
+        class:uploaded={s.disablePartialUpload && !s.upload?.dryRun}
         title={hasPending(id) ? 'Het wedstrijdblad bevat wijzigingen die nog niet op de server staan' : 'Alle wijzigingen staan op de server'}
         onclick={() => activate(id)}
         oncontextmenu={(e) => context(e, id)}
       >
         {#if hasPending(id)}<span class="star" aria-label="Niet opgeslagen">★</span>{/if}
+        {#if s.isOfficial}<VttlIcon status={vttlStatus(s, getSystem(s.matchSystemId))} />{/if}
         <span class="tile-text">{s.home.name || '…'}<br />{s.away.name || '…'}</span>
         {#if settings.showResultsInNav && sc}
           <span class="tile-score" class:win={sc.homeWins > sc.awayWins} class:loss={sc.homeWins < sc.awayWins}>

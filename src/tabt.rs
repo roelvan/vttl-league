@@ -361,7 +361,6 @@ impl Inner {
 impl Tabt {
 
     /// Drops every cached entry whose key contains `needle` (e.g. a club id).
-    #[allow(dead_code)]
     pub fn invalidate(&self, needle: &str) {
         self.inner.cache.lock().unwrap().retain(|k, _| !k.contains(needle));
     }
@@ -550,7 +549,6 @@ impl Tabt {
     }
 
     /// Returns (Result, ErrorLines). Never cached, never retried.
-    #[allow(dead_code)]
     pub async fn upload(&self, c: &Creds, data: &str) -> Result<(bool, Vec<String>)> {
         let r = self.call(Some(c), "UploadRequest", &[("Data", data.into())], TTL_NONE).await?;
         Ok((r.b("Result"), r.children("ErrorLines").map(|n| n.text.clone()).collect()))

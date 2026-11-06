@@ -85,10 +85,23 @@ pub fn soap_body(xml: &str) -> Result<Node> {
         .first()
         .ok_or_else(|| anyhow!("empty SOAP body"))?;
     if first.name == "Fault" {
-        bail!("VTTL fault: {}", first.s("faultstring"));
+        return Err(Fault { code: first.s("faultcode"), message: first.s("faultstring") }.into());
     }
     Ok(first.clone())
 }
+
+/// A SOAP fault from TabT, e.g. code "22" = no permission for this upload.
+#[derive(Debug)]
+pub struct Fault {
+    pub code: String,
+    pub message: String,
+}
+impl std::fmt::Display for Fault {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "VTTL fault {}: {}", self.code, self.message)
+    }
+}
+impl std::error::Error for Fault {}
 
 pub fn escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
@@ -108,7 +121,9 @@ mod tests {
 
     #[test]
     fn fault() {
-        let x = r#"<Envelope><Body><Fault><faultstring>bad &amp; wrong</faultstring></Fault></Body></Envelope>"#;
-        assert!(soap_body(x).unwrap_err().to_string().contains("bad & wrong"));
+        let x = r#"<Envelope><Body><Fault><faultcode>22</faultcode><faultstring>bad &amp; wrong</faultstring></Fault></Body></Envelope>"#;
+        let e = soap_body(x).unwrap_err();
+        assert!(e.to_string().contains("bad & wrong"));
+        assert_eq!(e.downcast_ref::<Fault>().unwrap().code, "22");
     }
 }
