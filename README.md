@@ -1,29 +1,37 @@
 # vttl-league
 
-Match sheet for the home matches of one club (default `WVL154`) on a league Saturday:
-lineups, individual results, ESP32 scoreboards over MQTT, and a TabT upload line for VTTL.
+Web version of ScoreSheet (the Windows match-sheet program for the Belgian table tennis
+competition), for VTTL clubs. Users log in with their own VTTL account.
 
 ```
-cp .env.example .env   # fill in MQTT and (optionally) VTTL credentials
-cargo run              # http://127.0.0.1:3100
-cargo test
+cp .env.example .env
+cargo run                      # API on http://127.0.0.1:3100, serves web/dist
+cd web && pnpm install
+pnpm dev                       # client with hot reload on http://127.0.0.1:5173 (proxies /api)
+pnpm build                     # production client in web/dist
+cargo test && pnpm check
 ```
 
 ## Architecture
 
-- `src/vttl.rs`: SOAP client (GetMatches, GetMembers, GetMatchSystems, GetSeasons, Upload), 60 s cache.
-- `src/mqtt.rs`: subscribes to `tabletennis/<id>/#` for each added device, decodes the state (`src/scoreboard.rs`), sends names.
-- `src/db.rs`: SQLite. Lineups and results carry a `rev`; a write with an old rev gets HTTP 409.
-- `src/upload.rs`: builds the I-line. Positions without a finished local result keep the VTTL result.
-- `src/api.rs`: HTTP API plus `/ws`, which pushes every change to all browsers.
-- `static/`: plain HTML + JS.
+- `src/tabt.rs`: VTTL TabT SOAP client. One shared cache for all users (the key has no
+  credentials); concurrent requests for the same data share one HTTP call.
+- `src/auth.rs`, `src/crypto.rs`: login with `Test` (`IsValidAccount`). The VTTL password is
+  kept encrypted (ChaCha20-Poly1305) in the session row, because uploads need it. The browser
+  only holds a random token in an HttpOnly cookie; the database keeps its SHA-256.
+- `src/db.rs`: SQLite (WAL). Migrations are numbered with `PRAGMA user_version`.
+- `src/api.rs`: JSON API. Errors are `{ "error": code, "message": text }`.
+- `web/`: Svelte 5 + Vite client. It keeps the last data in local storage and shows it at once.
+  A redirect or a non-JSON answer counts as "offline": the hall WiFi has a captive portal.
+- `src/scoreboard.rs`: decoder for the ESP32 scoreboard (not linked yet).
 
-## Rules
+## VTTL API facts (checked 2026-11-06)
 
-- `DRY_RUN=true` (default) only shows the I-line. There is no VTTL test database.
-- A manual result always wins over a scoreboard result. Clear the manual score to let the scoreboard write again.
-- Linking a scoreboard sends the names (home player = player 1). The first device match that starts after the
-  link belongs to that position. A finished match ends the link.
-- The app only listens to scoreboards in the device list (the `device` table). Add a device with its ID and
-  an alias; the app then subscribes to `tabletennis/<id>/#`. Removing a device unsubscribes and ends its link.
-- Doubles are not supported yet (no match system of the club uses them today).
+- `Test` gives no club and no rights for an account. A user picks their own name once
+  (`GetMembers` `NameSearch`); the club of that member becomes the club of the account.
+- A wrong login gives `IsValidAccount=false` with HTTP 200, not a fault.
+- `MatchUniqueId` only exists for played matches. `MatchId` (e.g. `PWVLH07/012`) is the key.
+- A match between two teams of the same club comes twice in `GetMatches` for that club.
+- `GetMatches` with `Club` + `Season` + `WithDetails` returns the whole season of a club in
+  one call (~1.5 s, ~650 kB XML).
+- There is no VTTL test database: uploads stay in dry-run mode by default.
