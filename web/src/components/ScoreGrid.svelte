@@ -4,6 +4,8 @@
   import { slotLabel } from '../lib/sheet/systems';
   import { gameSlots, type Score } from '../lib/sheet/score';
   import { change } from '../lib/workspace.svelte';
+  import { gameStatuses, GAME_STATUS_TEXT } from '../lib/sheet/vttl';
+  import VttlIcon from './VttlIcon.svelte';
 
   let { id, sheet, sys, score }: { id: string; sheet: Sheet; sys: MatchSystem; score: Score } = $props();
 
@@ -82,6 +84,7 @@
     if (moved) e.preventDefault();
   }
 
+  const statuses = $derived(gameStatuses(sheet, sys));
   const sets = $derived(Array.from({ length: sys.boxes }, (_, i) => i));
 </script>
 
@@ -92,6 +95,7 @@
     <span class="g-pts">BEHAALDE PUNTEN</span>
     <span class="g-tot">SETS</span>
     <span class="g-tot">WEDSTR</span>
+    <span class="g-st"></span>
   </div>
   {#each sys.games as game, gi (game.pos)}
     {@const row = score.games[gi]}
@@ -134,6 +138,9 @@
       </span>
       <span class="g-tot">
         <b>{row?.homeTotal ?? ''}</b><b>{row?.awayTotal ?? ''}</b>
+      </span>
+      <span class="g-st">
+        {#if statuses[gi]}<VttlIcon status={statuses[gi]} title={GAME_STATUS_TEXT[statuses[gi]!]} />{/if}
       </span>
     </div>
   {/each}

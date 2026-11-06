@@ -188,6 +188,25 @@ export function vttlStatus(s: Sheet, sys: MatchSystem): VttlStatus {
   return 'pending';
 }
 
+/** Status of one game row: is its result on VTTL? `null` = nothing to show. */
+export function gameStatuses(s: Sheet, sys: MatchSystem): (VttlStatus | null)[] {
+  if (!s.isOfficial || s.vttlLocked) return sys.games.map(() => null);
+  const mine = canonical(s, sys);
+  const seen = s.vttlSeen ?? {};
+  return sys.games.map((_, gi) => {
+    const m = mine[`g.${gi}`] ?? '';
+    const v = seen[`g.${gi}`] ?? '';
+    if (m === v) return m ? 'synced' : null;
+    return s.upload && !s.upload.ok ? 'error' : 'pending';
+  });
+}
+
+export const GAME_STATUS_TEXT: Partial<Record<VttlStatus, string>> = {
+  synced: 'Deze uitslag staat op VTTL',
+  pending: 'Deze uitslag staat nog niet op VTTL',
+  error: 'Deze uitslag staat nog niet op VTTL: de laatste upload is mislukt',
+};
+
 export const STATUS_TEXT: Record<VttlStatus, string> = {
   locked: 'Gevalideerd door VTTL (alleen lezen)',
   error: 'De laatste upload naar VTTL is mislukt',
