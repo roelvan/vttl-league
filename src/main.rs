@@ -1,15 +1,23 @@
 mod api;
 mod app;
+mod auth;
+mod crypto;
 mod db;
-mod mqtt;
+#[allow(dead_code)]
 mod scoreboard;
-mod upload;
-mod vttl;
+mod tabt;
 mod xml;
 
-use app::{App, Config};
+use app::App;
+use axum::extract::Request;
+use axum::http::{HeaderValue, header};
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use std::env::var;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tower_http::compression::CompressionLayer;
+use tower_http::services::{ServeDir, ServeFile};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -18,40 +26,40 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(var("RUST_LOG").unwrap_or_else(|_| "info".into()))
         .init();
 
-    let account = match (var("VTTL_ACCOUNT"), var("VTTL_PASSWORD")) {
-        (Ok(a), Ok(p)) if !a.is_empty() => Some((a, p)),
-        _ => None,
-    };
-    let mqtt_cfg = var("MQTT_HOST").ok().filter(|h| !h.is_empty()).map(|host| mqtt::MqttConfig {
-        host,
-        port: var("MQTT_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8883),
-        user: var("MQTT_USER").unwrap_or_default(),
-        password: var("MQTT_PASSWORD").unwrap_or_default(),
-        tls: var("MQTT_TLS").map(|v| v != "false").unwrap_or(true),
-    });
-    let (mqtt, eventloop) = mqtt::start(mqtt_cfg);
-    let dry_run = var("DRY_RUN").map(|v| v != "false").unwrap_or(true);
-    if !dry_run {
-        tracing::warn!("DRY_RUN=false: uploads change the LIVE VTTL database");
-    }
+    let bind = var("BIND").unwrap_or_else(|_| "127.0.0.1:3100".into());
+    let database = var("DATABASE").unwrap_or_else(|_| "data/vttl-league.sqlite".into());
+    let data_dir = PathBuf::from(&database).parent().map(PathBuf::from).unwrap_or_default();
+    std::fs::create_dir_all(&data_dir).ok();
+    let local = bind.starts_with("127.0.0.1") || bind.starts_with("localhost");
+    let web_dir = PathBuf::from(var("WEB_DIR").unwrap_or_else(|_| "web/dist".into()));
 
     let app = Arc::new(App {
-        cfg: Config { club: var("CLUB").unwrap_or_else(|_| "WVL154".into()), dry_run },
-        vttl: vttl::Vttl::new(
-            var("VTTL_ENDPOINT").unwrap_or_else(|_| "https://api.vttl.be/0.7/index.php?s=vttl".into()),
-            account,
-        ),
-        db: db::Db::open(&var("DATABASE").unwrap_or_else(|_| "vttl-league.sqlite".into()))?,
-        mqtt,
-        events: tokio::sync::broadcast::channel(256).0,
+        tabt: tabt::Tabt::new(var("VTTL_ENDPOINT").unwrap_or_else(|_| "https://api.vttl.be/0.7/index.php?s=vttl".into())),
+        db: db::Db::open(&database)?,
+        crypto: crypto::Crypto::load(var("SECRET_KEY").ok(), &data_dir.join("secret.key"))?,
+        cookie_secure: var("COOKIE_SECURE").map(|v| v != "false").unwrap_or(!local),
     });
-    if let Some(el) = eventloop {
-        tokio::spawn(mqtt::run(app.clone(), el));
-    }
 
-    let router = api::router(app).fallback_service(tower_http::services::ServeDir::new("static"));
-    let bind = var("BIND").unwrap_or_else(|_| "127.0.0.1:3100".into());
+    // The client is a single-page app: unknown paths get index.html.
+    let static_files = ServeDir::new(&web_dir).fallback(ServeFile::new(web_dir.join("index.html")));
+    let router = api::router(app)
+        .fallback_service(static_files)
+        .layer(middleware::from_fn(cache_headers))
+        .layer(CompressionLayer::new().br(true).gzip(true));
+
     tracing::info!("listening on http://{bind}");
     axum::serve(tokio::net::TcpListener::bind(&bind).await?, router).await?;
     Ok(())
+}
+
+/// Hashed build files never change, so the browser may keep them for a year.
+/// Everything else (index.html, the service worker, the API) must be checked each time.
+async fn cache_headers(req: Request, next: Next) -> Response {
+    let immutable = req.uri().path().starts_with("/assets/");
+    let mut res = next.run(req).await;
+    if !res.headers().contains_key(header::CACHE_CONTROL) {
+        let v = if immutable { "public, max-age=31536000, immutable" } else { "no-cache" };
+        res.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static(v));
+    }
+    res
 }

@@ -1,364 +1,149 @@
-//! SQLite storage: the local match sheet (lineups, results) and scoreboard links.
-//!
-//! Every lineup side and every result row has a `rev`. A write from a browser must
-//! carry the rev it saw; a mismatch is a `Conflict` (somebody else changed it first).
-//! Rows are never deleted, only cleared, so revs never go back to an old value.
+//! SQLite storage. The schema is versioned with `PRAGMA user_version`; each entry of
+//! `MIGRATIONS` runs once, in order.
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug)]
-pub struct Conflict {
-    pub current_rev: i64,
-}
-impl std::fmt::Display for Conflict {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "changed by another user (rev {})", self.current_rev)
-    }
-}
-impl std::error::Error for Conflict {}
+const MIGRATIONS: &[&str] = &[
+    // 1: accounts and sessions
+    "CREATE TABLE account(
+        account      TEXT PRIMARY KEY,
+        member       INTEGER,
+        member_name  TEXT,
+        club         TEXT,
+        created_at   INTEGER NOT NULL
+     );
+     CREATE TABLE session(
+        token_hash   TEXT PRIMARY KEY,
+        account      TEXT NOT NULL REFERENCES account(account),
+        secret       TEXT NOT NULL,
+        created_at   INTEGER NOT NULL,
+        last_seen    INTEGER NOT NULL
+     );
+     CREATE INDEX session_account ON session(account);",
+];
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LineupPlayer {
-    pub unique_index: i64,
-    pub first_name: String,
-    pub last_name: String,
-}
+/// Sessions end after this many seconds without use.
+pub const SESSION_IDLE: i64 = 120 * 86400;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Lineup {
-    /// Index 0 = team position 1. None = not assigned.
-    pub players: Vec<Option<LineupPlayer>>,
-    /// Unique index of the captain. None = not set.
-    pub captain: Option<i64>,
-    pub rev: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Forfeit {
-    Home,
-    Away,
-    Both,
+pub struct Db {
+    conn: Mutex<Connection>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ResultRow {
-    pub position: i64,
-    /// (home, away) points per set
-    pub sets: Vec<(u8, u8)>,
-    pub forfeit: Option<Forfeit>,
-    /// "manual" | "scoreboard" | None when cleared
-    pub source: Option<String>,
-    pub rev: i64,
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    pub account: String,
+    /// VTTL unique index of the member the user picked as "this is me".
+    pub member: Option<i64>,
+    pub member_name: Option<String>,
+    pub club: Option<String>,
 }
 
-impl ResultRow {
-    pub fn is_empty(&self) -> bool {
-        self.sets.is_empty() && self.forfeit.is_none()
-    }
+#[derive(Debug, Clone)]
+pub struct Session {
+    pub account: Account,
+    pub secret: String,
+    pub last_seen: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Link {
-    pub device_id: String,
-    pub match_id: String,
-    pub position: i64,
+pub fn now() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
 }
-
-/// A scoreboard added by hand, with a display name.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct Device {
-    pub device_id: String,
-    pub alias: String,
-}
-
-pub struct Db(Mutex<Connection>);
 
 impl Db {
     pub fn open(path: &str) -> Result<Self> {
-        let c = Connection::open(path)?;
-        c.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             CREATE TABLE IF NOT EXISTS lineup(
-               match_id TEXT NOT NULL, side TEXT NOT NULL, players TEXT NOT NULL,
-               rev INTEGER NOT NULL, PRIMARY KEY(match_id, side));
-             CREATE TABLE IF NOT EXISTS result(
-               match_id TEXT NOT NULL, position INTEGER NOT NULL, sets TEXT NOT NULL,
-               forfeit TEXT, source TEXT, rev INTEGER NOT NULL,
-               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               PRIMARY KEY(match_id, position));
-             CREATE TABLE IF NOT EXISTS link(
-               device_id TEXT PRIMARY KEY, match_id TEXT NOT NULL, position INTEGER NOT NULL);
-             CREATE TABLE IF NOT EXISTS device_match(
-               device_id TEXT NOT NULL, mqtt_match_id TEXT NOT NULL,
-               match_id TEXT, position INTEGER,
-               PRIMARY KEY(device_id, mqtt_match_id));
-             CREATE TABLE IF NOT EXISTS device(
-               device_id TEXT PRIMARY KEY, alias TEXT NOT NULL DEFAULT '');",
-        )?;
-        // Added later: databases from before have no captain column.
-        let has_captain = c
-            .prepare("SELECT 1 FROM pragma_table_info('lineup') WHERE name='captain'")?
-            .exists([])?;
-        if !has_captain {
-            c.execute_batch("ALTER TABLE lineup ADD COLUMN captain INTEGER;")?;
+        let conn = Connection::open(path)?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;")?;
+        let version: usize = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        for (i, m) in MIGRATIONS.iter().enumerate().skip(version) {
+            let tx = conn.unchecked_transaction()?;
+            tx.execute_batch(m)?;
+            tx.execute_batch(&format!("PRAGMA user_version = {}", i + 1))?;
+            tx.commit()?;
+            tracing::info!("database migrated to version {}", i + 1);
         }
-        Ok(Self(Mutex::new(c)))
+        Ok(Self { conn: Mutex::new(conn) })
     }
 
-    pub fn lineup(&self, match_id: &str, side: &str) -> Result<Option<Lineup>> {
-        let c = self.0.lock().unwrap();
-        let row: Option<(String, Option<i64>, i64)> = c
-            .query_row(
-                "SELECT players, captain, rev FROM lineup WHERE match_id=?1 AND side=?2",
-                params![match_id, side],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
-            .optional()?;
-        Ok(match row {
-            Some((p, captain, rev)) => Some(Lineup { players: serde_json::from_str(&p)?, captain, rev }),
-            None => None,
-        })
-    }
-
-    pub fn save_lineup(
-        &self,
-        match_id: &str,
-        side: &str,
-        players: &[Option<LineupPlayer>],
-        captain: Option<i64>,
-        expected_rev: i64,
-    ) -> Result<i64> {
-        let mut c = self.0.lock().unwrap();
-        let tx = c.transaction()?;
-        let cur: i64 = tx
-            .query_row(
-                "SELECT rev FROM lineup WHERE match_id=?1 AND side=?2",
-                params![match_id, side],
-                |r| r.get(0),
-            )
-            .optional()?
-            .unwrap_or(0);
-        if cur != expected_rev {
-            return Err(Conflict { current_rev: cur }.into());
-        }
-        tx.execute(
-            "INSERT INTO lineup(match_id, side, players, captain, rev) VALUES(?1,?2,?3,?4,?5)
-             ON CONFLICT(match_id, side) DO UPDATE SET players=excluded.players, captain=excluded.captain,
-               rev=excluded.rev",
-            params![match_id, side, serde_json::to_string(players)?, captain, cur + 1],
-        )?;
-        tx.commit()?;
-        Ok(cur + 1)
-    }
-
-    pub fn results(&self, match_id: &str) -> Result<Vec<ResultRow>> {
-        let c = self.0.lock().unwrap();
-        let mut st = c.prepare(
-            "SELECT position, sets, forfeit, source, rev FROM result WHERE match_id=?1 ORDER BY position",
-        )?;
-        let rows = st
-            .query_map(params![match_id], |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, Option<String>>(2)?,
-                    r.get::<_, Option<String>>(3)?,
-                    r.get::<_, i64>(4)?,
-                ))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        rows.into_iter()
-            .map(|(position, sets, forfeit, source, rev)| {
-                Ok(ResultRow {
-                    position,
-                    sets: serde_json::from_str(&sets)?,
-                    forfeit: forfeit.map(|f| serde_json::from_str(&format!("\"{f}\""))).transpose()?,
-                    source,
-                    rev,
-                })
-            })
-            .collect()
-    }
-
-    /// Manual write from a browser, checked against `expected_rev`.
-    /// Empty sets and no forfeit clears the row.
-    pub fn save_result_manual(
-        &self,
-        match_id: &str,
-        position: i64,
-        sets: &[(u8, u8)],
-        forfeit: Option<&Forfeit>,
-        expected_rev: i64,
-    ) -> Result<i64> {
-        let mut c = self.0.lock().unwrap();
-        let tx = c.transaction()?;
-        let cur = result_rev(&tx, match_id, position)?;
-        if cur != expected_rev {
-            return Err(Conflict { current_rev: cur }.into());
-        }
-        let empty = sets.is_empty() && forfeit.is_none();
-        upsert_result(&tx, match_id, position, sets, forfeit, (!empty).then_some("manual"), cur + 1)?;
-        tx.commit()?;
-        Ok(cur + 1)
-    }
-
-    /// Write from a scoreboard. Never overwrites a manual result.
-    /// Returns true when the row changed.
-    pub fn save_result_scoreboard(&self, match_id: &str, position: i64, sets: &[(u8, u8)]) -> Result<bool> {
-        let mut c = self.0.lock().unwrap();
-        let tx = c.transaction()?;
-        let existing: Option<(String, Option<String>)> = tx
-            .query_row(
-                "SELECT sets, source FROM result WHERE match_id=?1 AND position=?2",
-                params![match_id, position],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()?;
-        let new_sets = serde_json::to_string(sets)?;
-        if let Some((s, src)) = &existing {
-            if src.as_deref() == Some("manual") || (src.as_deref() == Some("scoreboard") && *s == new_sets) {
-                return Ok(false);
-            }
-        }
-        let cur = result_rev(&tx, match_id, position)?;
-        upsert_result(&tx, match_id, position, sets, None, Some("scoreboard"), cur + 1)?;
-        tx.commit()?;
-        Ok(true)
-    }
-
-    pub fn devices(&self) -> Result<Vec<Device>> {
-        let c = self.0.lock().unwrap();
-        let mut st = c.prepare("SELECT device_id, alias FROM device ORDER BY device_id")?;
-        let v = st
-            .query_map([], |r| Ok(Device { device_id: r.get(0)?, alias: r.get(1)? }))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(v)
-    }
-
-    /// Adds a device or changes its alias.
-    pub fn save_device(&self, d: &Device) -> Result<()> {
-        self.0.lock().unwrap().execute(
-            "INSERT INTO device(device_id, alias) VALUES(?1,?2)
-             ON CONFLICT(device_id) DO UPDATE SET alias=excluded.alias",
-            params![d.device_id, d.alias],
-        )?;
-        Ok(())
-    }
-
-    pub fn delete_device(&self, device_id: &str) -> Result<bool> {
-        Ok(self.0.lock().unwrap().execute("DELETE FROM device WHERE device_id=?1", params![device_id])? > 0)
-    }
-
-    pub fn links(&self) -> Result<Vec<Link>> {
-        let c = self.0.lock().unwrap();
-        let mut st = c.prepare("SELECT device_id, match_id, position FROM link ORDER BY device_id")?;
-        let v = st
-            .query_map([], |r| Ok(Link { device_id: r.get(0)?, match_id: r.get(1)?, position: r.get(2)? }))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(v)
-    }
-
-    pub fn link(&self, device_id: &str) -> Result<Option<Link>> {
-        Ok(self.links()?.into_iter().find(|l| l.device_id == device_id))
-    }
-
-    pub fn set_link(&self, l: &Link) -> Result<()> {
-        self.0.lock().unwrap().execute(
-            "INSERT INTO link(device_id, match_id, position) VALUES(?1,?2,?3)
-             ON CONFLICT(device_id) DO UPDATE SET match_id=excluded.match_id, position=excluded.position",
-            params![l.device_id, l.match_id, l.position],
-        )?;
-        Ok(())
-    }
-
-    pub fn delete_link(&self, device_id: &str) -> Result<bool> {
-        Ok(self.0.lock().unwrap().execute("DELETE FROM link WHERE device_id=?1", params![device_id])? > 0)
-    }
-
-    /// Which team match position a device match belongs to. The first time a device
-    /// match is seen it is bound to the device's link at that moment (or to nothing).
-    pub fn attribute(&self, device_id: &str, mqtt_match_id: &str) -> Result<Option<(String, i64)>> {
-        let c = self.0.lock().unwrap();
-        let row: Option<(Option<String>, Option<i64>)> = c
-            .query_row(
-                "SELECT match_id, position FROM device_match WHERE device_id=?1 AND mqtt_match_id=?2",
-                params![device_id, mqtt_match_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()?;
-        if let Some((m, p)) = row {
-            return Ok(m.zip(p));
-        }
-        let link: Option<(String, i64)> = c
-            .query_row(
-                "SELECT match_id, position FROM link WHERE device_id=?1",
-                params![device_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()?;
+    pub fn create_session(&self, account: &str, token_hash: &str, secret: &str) -> Result<Account> {
+        let c = self.conn.lock().unwrap();
+        let t = now();
         c.execute(
-            "INSERT INTO device_match(device_id, mqtt_match_id, match_id, position) VALUES(?1,?2,?3,?4)",
-            params![device_id, mqtt_match_id, link.as_ref().map(|l| &l.0), link.as_ref().map(|l| l.1)],
+            "INSERT INTO account(account, created_at) VALUES (?1, ?2) ON CONFLICT(account) DO NOTHING",
+            params![account, t],
         )?;
-        Ok(link)
+        c.execute(
+            "INSERT INTO session(token_hash, account, secret, created_at, last_seen) VALUES (?1, ?2, ?3, ?4, ?4)",
+            params![token_hash, account, secret, t],
+        )?;
+        // A new login also carries the newest password: update the other sessions.
+        c.execute("UPDATE session SET secret = ?2 WHERE account = ?1", params![account, secret])?;
+        c.execute("DELETE FROM session WHERE last_seen < ?1", params![t - SESSION_IDLE])?;
+        account_row(&c, account).map(|a| a.expect("account exists"))
     }
 
-    /// Binds a device match to a team match position (overwrites).
-    pub fn bind(&self, device_id: &str, mqtt_match_id: &str, match_id: &str, position: i64) -> Result<()> {
-        self.0.lock().unwrap().execute(
-            "INSERT INTO device_match(device_id, mqtt_match_id, match_id, position) VALUES(?1,?2,?3,?4)
-             ON CONFLICT(device_id, mqtt_match_id) DO UPDATE SET match_id=excluded.match_id, position=excluded.position",
-            params![device_id, mqtt_match_id, match_id, position],
-        )?;
+    pub fn session(&self, token_hash: &str) -> Result<Option<Session>> {
+        let c = self.conn.lock().unwrap();
+        let row = c
+            .query_row(
+                "SELECT s.secret, s.last_seen, a.account, a.member, a.member_name, a.club
+                 FROM session s JOIN account a ON a.account = s.account WHERE s.token_hash = ?1",
+                params![token_hash],
+                |r| {
+                    Ok(Session {
+                        secret: r.get(0)?,
+                        last_seen: r.get(1)?,
+                        account: Account { account: r.get(2)?, member: r.get(3)?, member_name: r.get(4)?, club: r.get(5)? },
+                    })
+                },
+            )
+            .optional()?;
+        Ok(row.filter(|s| s.last_seen >= now() - SESSION_IDLE))
+    }
+
+    pub fn touch_session(&self, token_hash: &str) -> Result<()> {
+        let c = self.conn.lock().unwrap();
+        c.execute("UPDATE session SET last_seen = ?2 WHERE token_hash = ?1", params![token_hash, now()])?;
         Ok(())
     }
 
-    /// Marks device matches that already exist as "not part of a link", so a new link
-    /// only picks up a match that starts after it.
-    pub fn mark_seen(&self, device_id: &str, mqtt_match_ids: &[String]) -> Result<()> {
-        let c = self.0.lock().unwrap();
-        for m in mqtt_match_ids {
-            c.execute(
-                "INSERT OR IGNORE INTO device_match(device_id, mqtt_match_id) VALUES(?1,?2)",
-                params![device_id, m],
-            )?;
-        }
+    pub fn delete_session(&self, token_hash: &str) -> Result<()> {
+        let c = self.conn.lock().unwrap();
+        c.execute("DELETE FROM session WHERE token_hash = ?1", params![token_hash])?;
         Ok(())
+    }
+
+    pub fn set_member(&self, account: &str, member: Option<(i64, &str, &str)>) -> Result<Account> {
+        let c = self.conn.lock().unwrap();
+        let (m, name, club) = match member {
+            Some((m, n, cl)) => (Some(m), Some(n), Some(cl)),
+            None => (None, None, None),
+        };
+        c.execute(
+            "UPDATE account SET member = ?2, member_name = ?3, club = ?4 WHERE account = ?1",
+            params![account, m, name, club],
+        )?;
+        account_row(&c, account).map(|a| a.expect("account exists"))
     }
 }
 
-fn result_rev(c: &Connection, match_id: &str, position: i64) -> Result<i64> {
-    Ok(c
-        .query_row(
-            "SELECT rev FROM result WHERE match_id=?1 AND position=?2",
-            params![match_id, position],
-            |r| r.get(0),
-        )
-        .optional()?
-        .unwrap_or(0))
+fn account_row(c: &Connection, account: &str) -> Result<Option<Account>> {
+    Ok(c.query_row(
+        "SELECT account, member, member_name, club FROM account WHERE account = ?1",
+        params![account],
+        |r| Ok(Account { account: r.get(0)?, member: r.get(1)?, member_name: r.get(2)?, club: r.get(3)? }),
+    )
+    .optional()?)
 }
 
-fn upsert_result(
-    c: &Connection,
-    match_id: &str,
-    position: i64,
-    sets: &[(u8, u8)],
-    forfeit: Option<&Forfeit>,
-    source: Option<&str>,
-    rev: i64,
-) -> Result<()> {
-    let forfeit = forfeit.map(|f| serde_json::to_value(f).unwrap().as_str().unwrap().to_string());
-    c.execute(
-        "INSERT INTO result(match_id, position, sets, forfeit, source, rev) VALUES(?1,?2,?3,?4,?5,?6)
-         ON CONFLICT(match_id, position) DO UPDATE SET sets=excluded.sets, forfeit=excluded.forfeit,
-           source=excluded.source, rev=excluded.rev, updated_at=CURRENT_TIMESTAMP",
-        params![match_id, position, serde_json::to_string(sets)?, forfeit, source, rev],
-    )?;
-    Ok(())
+#[cfg(test)]
+pub fn memory() -> Db {
+    let path = std::env::temp_dir().join(format!("vl-test-{}.sqlite", rand::random::<u64>()));
+    Db::open(path.to_str().unwrap()).unwrap()
 }
 
 #[cfg(test)]
@@ -366,51 +151,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn revisions_and_manual_wins() {
-        let db = Db::open(":memory:").unwrap();
-        assert_eq!(db.save_result_manual("M", 1, &[(11, 7)], None, 0).unwrap(), 1);
-        // stale writer
-        let e = db.save_result_manual("M", 1, &[(11, 8)], None, 0).unwrap_err();
-        assert!(e.downcast_ref::<Conflict>().is_some());
-        // scoreboard does not overwrite manual
-        assert!(!db.save_result_scoreboard("M", 1, &[(11, 9)]).unwrap());
-        // clear keeps the rev moving forward
-        assert_eq!(db.save_result_manual("M", 1, &[], None, 1).unwrap(), 2);
-        assert!(db.save_result_scoreboard("M", 1, &[(11, 9)]).unwrap());
-        assert_eq!(db.results("M").unwrap()[0].rev, 3);
-    }
-
-    #[test]
-    fn lineup_captain() {
-        let db = Db::open(":memory:").unwrap();
-        let p = LineupPlayer { unique_index: 7, first_name: "A".into(), last_name: "B".into() };
-        assert_eq!(db.save_lineup("M", "H", &[Some(p), None], Some(7), 0).unwrap(), 1);
-        let l = db.lineup("M", "H").unwrap().unwrap();
-        assert_eq!((l.captain, l.players.len(), l.rev), (Some(7), 2, 1));
-        db.save_lineup("M", "H", &[None, None], None, 1).unwrap();
-        assert_eq!(db.lineup("M", "H").unwrap().unwrap().captain, None);
-    }
-
-    #[test]
-    fn devices() {
-        let db = Db::open(":memory:").unwrap();
-        db.save_device(&Device { device_id: "B".into(), alias: "Table 2".into() }).unwrap();
-        db.save_device(&Device { device_id: "A".into(), alias: "".into() }).unwrap();
-        db.save_device(&Device { device_id: "A".into(), alias: "Table 1".into() }).unwrap();
-        let v = db.devices().unwrap();
-        assert_eq!(v.iter().map(|d| (&*d.device_id, &*d.alias)).collect::<Vec<_>>(), [("A", "Table 1"), ("B", "Table 2")]);
-        assert!(db.delete_device("A").unwrap());
-        assert!(!db.delete_device("A").unwrap());
-    }
-
-    #[test]
-    fn attribution() {
-        let db = Db::open(":memory:").unwrap();
-        db.mark_seen("D", &["old".into()]).unwrap();
-        db.set_link(&Link { device_id: "D".into(), match_id: "M".into(), position: 3 }).unwrap();
-        assert_eq!(db.attribute("D", "old").unwrap(), None);
-        assert_eq!(db.attribute("D", "new").unwrap(), Some(("M".into(), 3)));
-        db.delete_link("D").unwrap();
-        assert_eq!(db.attribute("D", "new").unwrap(), Some(("M".into(), 3)));
+    fn session_lifecycle() {
+        let db = memory();
+        let a = db.create_session("jan", "h1", "s1").unwrap();
+        assert_eq!(a.member, None);
+        db.create_session("jan", "h2", "s2").unwrap();
+        // The older session gets the new password too.
+        assert_eq!(db.session("h1").unwrap().unwrap().secret, "s2");
+        db.set_member("jan", Some((530077, "VANEYGHEN Roel", "WVL154"))).unwrap();
+        let s = db.session("h2").unwrap().unwrap();
+        assert_eq!(s.account.club.as_deref(), Some("WVL154"));
+        db.delete_session("h2").unwrap();
+        assert!(db.session("h2").unwrap().is_none());
+        assert!(db.session("h1").unwrap().is_some());
     }
 }
