@@ -18,6 +18,7 @@ import type { Sheet } from './sheet/types';
 import { getSystem } from './sheet/systems';
 import { computeScore, isByeClub } from './sheet/score';
 import { session } from './session.svelte';
+import { publicClub } from './viewer.svelte';
 import { importOps, uploadOps, vttlStatus } from './sheet/vttl';
 import { validateSheet } from './validation';
 import { exportCsv } from './sheet/export';
@@ -180,6 +181,11 @@ export const set = (id: string, p: Op['p'], v: unknown) => change(id, [{ p, v }]
 
 // ---------------------------------------------------------------- load matches
 
+function getSheet(id: string) {
+  const pub = publicClub();
+  return pub ? api.publicSheet(pub, id) : api.sheet(id);
+}
+
 /** Puts a stored record from the server into the workspace (keeps local pending ops on top). */
 export function addStored(stored: StoredSheet) {
   const e = ws.entries[stored.id];
@@ -191,7 +197,8 @@ export function addStored(stored: StoredSheet) {
 /** The stored records of the club for one day (club night). Offline: keep what we have. */
 export async function loadDay(day: string) {
   try {
-    for (const s of await api.sheetsOn(day)) addStored(s);
+    const pub = publicClub();
+    for (const s of await (pub ? api.publicSheets(pub, day) : api.sheetsOn(day))) addStored(s);
   } catch (e) {
     if (!(e instanceof OfflineError)) throw e;
   }
@@ -205,7 +212,7 @@ export async function ensureMatch(row: MatchRow, season: number) {
   const id = row.matchId;
   if (!ws.entries[id] || ws.entries[id].draft) {
     try {
-      addStored(await api.sheet(id));
+      addStored(await getSheet(id));
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 404) && !(e instanceof OfflineError)) throw e;
       if (!ws.entries[id]) {
@@ -243,7 +250,7 @@ function stamp() {
 }
 
 export async function flush() {
-  if (flushing) return;
+  if (flushing || publicClub()) return;
   flushing = true;
   ws.syncing = true;
   const refetch = new Set<string>();
@@ -310,7 +317,7 @@ export async function refresh(id: string) {
   const e = ws.entries[id];
   if (!e) return;
   try {
-    adopt(e, await api.sheet(id));
+    adopt(e, await getSheet(id));
     persist();
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
@@ -339,11 +346,23 @@ const listeners = new Set<Listener>();
 export const onServerEvent = (l: Listener) => (listeners.add(l), () => listeners.delete(l));
 
 let socket: WebSocket | null = null;
+let socketPath = '';
 let retry = 0;
 
+/** Opens the live connection: the club's own, or the public one for a spectator. Safe to call again. */
 export function connect() {
-  if (socket || !session.me?.account.club) return;
-  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`;
+  const pub = publicClub();
+  const path = pub ? `/api/public/ws?club=${encodeURIComponent(pub)}` : session.me?.account.club ? '/api/ws' : '';
+  if (socket && socketPath === path) return;
+  if (socket) {
+    const old = socket;
+    socket = null;
+    old.onclose = null;
+    old.close();
+  }
+  if (!path) return;
+  socketPath = path;
+  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${path}`;
   const s = new WebSocket(url);
   socket = s;
   s.onopen = async () => {
@@ -379,6 +398,7 @@ export function connect() {
     for (const l of listeners) l(msg);
   };
   s.onclose = () => {
+    if (socket !== s) return;
     socket = null;
     ws.live = false;
     retry = Math.min(retry ? retry * 2 : 1000, 15000);
@@ -405,11 +425,14 @@ export async function importFromVttl(id: string) {
   const e = ws.entries[id];
   if (!e || !e.view.isOfficial) return;
   const s = e.view;
-  const m = await api.match(s.matchId, s.season || undefined);
+  const pub = publicClub();
+  // A spectator takes the club's stored record as it is; only a draft is filled from VTTL.
+  if (pub && !e.draft) return;
+  const m = pub ? await api.publicMatch(pub, s.matchId) : await api.match(s.matchId, s.season || undefined);
   const sys = getSystem(s.matchSystemId);
   const def = defaultCategory();
   // Strength lists, for the position and index that VTTL does not give.
-  await Promise.allSettled(
+  if (!pub) await Promise.allSettled(
     [s.home.clubId, s.away.clubId].filter((c) => c && !isByeClub(c)).flatMap((c) => [loadMembers(c, s.playerCategory), loadMembers(c, def)]),
   );
   const cur = ws.entries[id]?.view;

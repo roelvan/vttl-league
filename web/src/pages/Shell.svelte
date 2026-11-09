@@ -14,7 +14,8 @@
   import RefereeSlips from '../components/print/RefereeSlips.svelte';
   import { route, match } from '../lib/router.svelte';
   import { matchIdFromSlug, urls, type MenuAction } from '../lib/nav';
-  import { data, loadCategories, loadClubs, loadMatches } from '../lib/data.svelte';
+  import { data, loadCategories, loadClubs, loadMatches, loadPublicMatches } from '../lib/data.svelte';
+  import { viewer, viewClub, publicClub } from '../lib/viewer.svelte';
   import { ws, connect, scheduleFlush, ensureMatch, setCurrent, onServerEvent, uploadSheet } from '../lib/workspace.svelte';
   import { onBoardMessage, loadDevices } from '../lib/boards.svelte';
   import { session } from '../lib/session.svelte';
@@ -27,29 +28,48 @@
   import type { PrintJob } from '../lib/sheet/print';
   import { tick } from 'svelte';
 
-  // Reference data in the background; the cached copies are used meanwhile.
-  loadCategories().catch(() => {});
-  loadClubs().catch(() => {});
-  loadMatches().catch(() => {});
-  loadDevices().catch(() => {});
-  connect();
-  scheduleFlush(0);
+  // Reference data of the own club in the background; the cached copies are used meanwhile.
+  if (session.me) {
+    loadCategories().catch(() => {});
+    loadClubs().catch(() => {});
+    loadMatches().catch(() => {});
+    scheduleFlush(0);
+  }
   onServerEvent((msg) => {
     if (msg.type === 'board') onBoardMessage(msg as never);
   });
 
   // ---------------------------------------------------------------- route
+  // "/c/{club}/…" = the public pages of a club (no login needed); without it: the own club.
   const m = $derived.by(() => {
-    const p = route.path;
+    const pm = /^\/c\/([^/]+)(\/.*)?$/.exec(route.path);
+    const club = pm ? decodeURIComponent(pm[1]) : null;
+    const p = pm ? (pm[2] ?? '/') : route.path;
     let r: Record<string, string> | null;
-    if ((r = match('/wedstrijd/:id/opstelling', p))) return { section: 'lineup' as const, id: matchIdFromSlug(r.id), day: null };
-    if ((r = match('/wedstrijd/:id', p))) return { section: 'match' as const, id: matchIdFromSlug(r.id), day: null };
-    if ((r = match('/dag/:day', p)) && /^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { section: 'night' as const, id: null, day: r.day };
-    if (p === '/instellingen') return { section: 'other' as const, id: null, day: null };
-    return { section: 'night' as const, id: null, day: todayIso() };
+    if ((r = match('/wedstrijd/:id/opstelling', p))) return { club, section: 'lineup' as const, id: matchIdFromSlug(r.id), day: null };
+    if ((r = match('/wedstrijd/:id', p))) return { club, section: 'match' as const, id: matchIdFromSlug(r.id), day: null };
+    if ((r = match('/dag/:day', p)) && /^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { club, section: 'night' as const, id: null, day: r.day };
+    if (p === '/instellingen' && !club && session.me) return { club, section: 'other' as const, id: null, day: null };
+    return { club, section: 'night' as const, id: null, day: todayIso() };
   });
 
-  const rows = $derived(data.matches?.matches ?? []);
+  $effect.pre(() => {
+    viewer.club = m.club;
+  });
+  const pub = $derived(publicClub());
+
+  // Public: the club's match list without login. The live connection and boards follow the club.
+  $effect(() => {
+    if (pub) loadPublicMatches(pub).catch((e) => (ws.message = `Laden mislukt: ${e.message}`));
+  });
+  $effect(() => {
+    void pub;
+    connect();
+    loadDevices().catch(() => {});
+  });
+
+  const list = $derived(pub ? data.publicMatches[pub] : data.matches);
+  const rows = $derived(list?.matches ?? []);
   const row = $derived(m.id ? (rows.find((x) => x.matchId === m.id) ?? null) : null);
   const sheet = $derived(m.id ? ws.entries[m.id]?.view : undefined);
   /** The match the nav items point to: the one on screen, else the last one shown. */
@@ -60,7 +80,7 @@
     const id = m.id;
     if (!id) return;
     setCurrent(id);
-    if (row && data.matches) ensureMatch(row, data.matches.season).catch((e) => (ws.message = `Laden mislukt: ${e.message}`));
+    if (row && list) ensureMatch(row, list.season).catch((e) => (ws.message = `Laden mislukt: ${e.message}`));
   });
 
   $effect(() => {
@@ -79,7 +99,9 @@
   async function onaction(a: MenuAction) {
     if (a === 'about') dialog = { kind: 'about' };
     else if (a === 'share') {
-      const url = `${location.origin}${m.id ? urls.match(m.id) : urls.day(day)}`;
+      const club = viewClub();
+      if (!club) return;
+      const url = `${location.origin}${urls.share(club, m.id, day)}`;
       try {
         await navigator.clipboard.writeText(url);
         ws.message = 'Publieke link gekopieerd. Iedereen met de link kan de wedstrijd live volgen.';
@@ -127,7 +149,7 @@
 <TopBar
   section={m.section}
   matchId={navMatch}
-  datechip={row ? `${shortDate(row.date)}${row.week ? ` · week ${row.week}` : ''}` : ''}
+  datechip={row ? `${shortDate(row.date)}${row.week ? ` · week ${row.week}` : ''}` : pub ? (data.publicMatches[pub]?.club?.name ?? pub) : ''}
   {onaction}
   matchActions={ourMatch}
 />
@@ -135,13 +157,13 @@
 <div class="shell" class:single={m.section === 'other'}>
   {#if m.section !== 'other'}
     <aside class="side-night" aria-label="Clubavond">
-      <ClubNight {day} currentId={m.id} filters={false} />
+      <ClubNight {day} {rows} loaded={!!list} currentId={m.id} filters={false} />
     </aside>
   {/if}
 
   <main class="view">
     {#if m.section === 'night'}
-      <div class="view-night-only view"><ClubNight {day} currentId={ws.current} /></div>
+      <div class="view-night-only view"><ClubNight {day} {rows} loaded={!!list} currentId={ws.current} /></div>
       <div class="card empty hide-mobile">
         <h2>Kies een wedstrijd</h2>
         <p>Kies links een wedstrijd van de clubavond om ze live te volgen.</p>

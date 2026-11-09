@@ -29,7 +29,7 @@
   {#if !people.length || !people.some((p) => p.full)}
     <span class="faint">Nog niet opgesteld</span>
   {:else if people.length === 1}
-    {#if people[0].initial}<span class="fi">{people[0].initial} </span>{/if}{people[0].last}
+    {#if people[0].initial}<span class="fi">{`${people[0].initial}\u00a0`}</span>{/if}{people[0].last}
   {:else}
     {people.map((p) => p.last).join(' / ')}
   {/if}

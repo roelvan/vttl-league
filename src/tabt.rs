@@ -382,14 +382,14 @@ impl Tabt {
             .collect())
     }
 
-    pub async fn current_season(&self, c: &Creds) -> Result<i64> {
-        let r = self.call(Some(c), "GetSeasonsRequest", &[], TTL_HOUR).await?;
+    pub async fn current_season(&self, c: Option<&Creds>) -> Result<i64> {
+        let r = self.call(c, "GetSeasonsRequest", &[], TTL_HOUR).await?;
         Ok(r.i("CurrentSeason"))
     }
 
-    pub async fn club(&self, c: &Creds, season: i64, club: &str) -> Result<Option<Club>> {
+    pub async fn club(&self, c: Option<&Creds>, season: i64, club: &str) -> Result<Option<Club>> {
         let r = self
-            .call(Some(c), "GetClubs", &[("Season", season.to_string()), ("Club", club.into())], TTL_DAY)
+            .call(c, "GetClubs", &[("Season", season.to_string()), ("Club", club.into())], TTL_DAY)
             .await?;
         Ok(r.children("ClubEntries").next().map(club_entry))
     }
@@ -399,9 +399,9 @@ impl Tabt {
         Ok(r.children("ClubEntries").map(club_entry).collect())
     }
 
-    pub async fn teams(&self, c: &Creds, season: i64, club: &str) -> Result<Vec<Team>> {
+    pub async fn teams(&self, c: Option<&Creds>, season: i64, club: &str) -> Result<Vec<Team>> {
         let r = self
-            .call(Some(c), "GetClubTeamsRequest", &[("Club", club.into()), ("Season", season.to_string())], TTL_HOUR)
+            .call(c, "GetClubTeamsRequest", &[("Club", club.into()), ("Season", season.to_string())], TTL_HOUR)
             .await?;
         Ok(r.children("TeamEntries")
             .map(|t| Team {
@@ -415,8 +415,8 @@ impl Tabt {
             .collect())
     }
 
-    pub async fn divisions(&self, c: &Creds, season: i64) -> Result<Vec<Division>> {
-        let r = self.call(Some(c), "GetDivisions", &[("Season", season.to_string())], TTL_DAY).await?;
+    pub async fn divisions(&self, c: Option<&Creds>, season: i64) -> Result<Vec<Division>> {
+        let r = self.call(c, "GetDivisions", &[("Season", season.to_string())], TTL_DAY).await?;
         Ok(r.children("DivisionEntries")
             .map(|d| Division {
                 id: d.i("DivisionId"),
@@ -429,10 +429,10 @@ impl Tabt {
     }
 
     /// All matches of a club in a season (home and away), with details.
-    pub async fn club_matches(&self, c: &Creds, season: i64, club: &str) -> Result<Vec<TeamMatch>> {
+    pub async fn club_matches(&self, c: Option<&Creds>, season: i64, club: &str) -> Result<Vec<TeamMatch>> {
         let r = self
             .call(
-                Some(c),
+                c,
                 "GetMatchesRequest",
                 &[("Club", club.into()), ("Season", season.to_string()), ("WithDetails", "true".into())],
                 TTL_SHORT,

@@ -23,6 +23,8 @@ export const data = $state({
   categories: load<PlayerCategory[]>('vl.cats') ?? [],
   clubs: load<Club[]>('vl.clubs') ?? [],
   matches: load<MatchList>('vl.matches.current') ?? null,
+  /** Match lists of other clubs (public pages), by club id. */
+  publicMatches: {} as Record<string, MatchList & { club: Club | null }>,
   /** "club|category" -> strength list */
   members: load<Record<string, Member[]>>('vl.members') ?? {},
 });
@@ -63,6 +65,13 @@ export function loadMatches(season?: number) {
       save('vl.matches.current', m);
     }
     return m;
+  });
+}
+
+export function loadPublicMatches(club: string) {
+  return once(`public.${club}`, async () => {
+    data.publicMatches[club] = await api.publicClub(club);
+    return data.publicMatches[club];
   });
 }
 

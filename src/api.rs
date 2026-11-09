@@ -3,6 +3,7 @@
 use crate::app::App;
 use crate::auth::{self, User};
 use crate::boards;
+use crate::public;
 use crate::crypto;
 use crate::db::{self, Account};
 use crate::sheets;
@@ -92,6 +93,12 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/devices", get(boards::list_devices).put(boards::save_device).delete(boards::delete_device))
         .route("/api/boards", get(boards::states))
         .route("/api/boards/link", post(boards::link))
+        .route("/api/public/club", get(public::club))
+        .route("/api/public/sheets", get(public::sheets))
+        .route("/api/public/sheet", get(public::sheet))
+        .route("/api/public/match", get(public::team_match))
+        .route("/api/public/boards", get(public::boards))
+        .route("/api/public/ws", get(public::ws))
         .with_state(app)
 }
 
@@ -150,9 +157,9 @@ async fn logout(State(app): State<Arc<App>>, headers: HeaderMap) -> Result<Respo
 }
 
 async fn me_body(app: &App, creds: &Creds, acc: &Account) -> Value {
-    let season = app.tabt.current_season(creds).await.ok();
+    let season = app.tabt.current_season(Some(creds)).await.ok();
     let club = match (&acc.club, season) {
-        (Some(c), Some(s)) => app.tabt.club(creds, s, c).await.ok().flatten(),
+        (Some(c), Some(s)) => app.tabt.club(Some(creds), s, c).await.ok().flatten(),
         _ => None,
     };
     json!({ "account": acc, "club": club, "currentSeason": season, "uploadEnabled": app.upload_enabled })
@@ -210,7 +217,7 @@ struct SeasonQuery {
 async fn season_or_current(app: &App, u: &User, s: Option<i64>) -> Result<i64, ApiError> {
     match s {
         Some(s) => Ok(s),
-        None => app.tabt.current_season(&u.creds).await.map_err(ApiError::vttl),
+        None => app.tabt.current_season(Some(&u.creds)).await.map_err(ApiError::vttl),
     }
 }
 
@@ -221,7 +228,7 @@ async fn seasons(State(app): State<Arc<App>>, u: User) -> R<Vec<tabt::Season>> {
 async fn club(State(app): State<Arc<App>>, u: User, Query(q): Query<SeasonQuery>) -> R<Value> {
     let season = season_or_current(&app, &u, q.season).await?;
     let club = u.club()?;
-    let (c, teams) = tokio::try_join!(app.tabt.club(&u.creds, season, club), app.tabt.teams(&u.creds, season, club))
+    let (c, teams) = tokio::try_join!(app.tabt.club(Some(&u.creds), season, club), app.tabt.teams(Some(&u.creds), season, club))
         .map_err(ApiError::vttl)?;
     Ok(Json(json!({ "club": c, "teams": teams, "season": season })))
 }
@@ -305,11 +312,15 @@ fn team_letter(team_name: &str) -> &str {
 
 async fn club_matches(State(app): State<Arc<App>>, u: User, Query(q): Query<SeasonQuery>) -> Result<Response, ApiError> {
     let season = season_or_current(&app, &u, q.season).await?;
-    let club = u.club()?;
+    Ok(Json(match_list(&app, Some(&u.creds), season, u.club()?).await?).into_response())
+}
+
+/// The season of a club as the client's `MatchList`. Also used without login (public pages).
+pub async fn match_list(app: &App, creds: Option<&Creds>, season: i64, club: &str) -> Result<Value, ApiError> {
     let (matches, teams, divisions) = tokio::try_join!(
-        app.tabt.club_matches(&u.creds, season, club),
-        app.tabt.teams(&u.creds, season, club),
-        app.tabt.divisions(&u.creds, season)
+        app.tabt.club_matches(creds, season, club),
+        app.tabt.teams(creds, season, club),
+        app.tabt.divisions(creds, season)
     )
     .map_err(ApiError::vttl)?;
     let levels: HashMap<i64, i64> = divisions.iter().map(|d| (d.id, d.level)).collect();
@@ -333,7 +344,7 @@ async fn club_matches(State(app): State<Arc<App>>, u: User, Query(q): Query<Seas
             }
         })
         .collect();
-    Ok(Json(json!({ "season": season, "teams": teams, "matches": rows })).into_response())
+    Ok(json!({ "season": season, "teams": teams, "matches": rows }))
 }
 
 #[derive(Deserialize)]
@@ -347,7 +358,7 @@ struct MatchQuery {
 async fn match_detail(State(app): State<Arc<App>>, u: User, Query(q): Query<MatchQuery>) -> R<TeamMatch> {
     let season = season_or_current(&app, &u, q.season).await?;
     let club = u.club()?;
-    let matches = app.tabt.club_matches(&u.creds, season, club).await.map_err(ApiError::vttl)?;
+    let matches = app.tabt.club_matches(Some(&u.creds), season, club).await.map_err(ApiError::vttl)?;
     let m = matches
         .into_iter()
         .find(|m| m.match_id == q.id)

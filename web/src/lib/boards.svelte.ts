@@ -6,6 +6,7 @@
 
 import { api, ApiError } from './api';
 import { ws } from './workspace.svelte';
+import { publicClub } from './viewer.svelte';
 import type { Sheet } from './sheet/types';
 import type { BoardLive, GameView, LiveView, TableView } from './live';
 
@@ -42,7 +43,10 @@ export const boards = $state({
 });
 
 export async function loadDevices() {
-  const [devices, states] = await Promise.all([api.devices(), api.boardStates().catch(() => [])]);
+  const pub = publicClub();
+  const [devices, states] = pub
+    ? await api.publicBoards(pub).then((r) => [r.devices, r.states] as const)
+    : await Promise.all([api.devices(), api.boardStates().catch(() => [] as BoardState[])]);
   boards.devices = devices;
   for (const s of states) boards.live[s.device] = s;
   boards.loaded = true;

@@ -10,9 +10,11 @@
   loadMe();
 
   const needsMember = $derived(!!session.me && !session.me.account.member);
+  /** "/c/{club}/…": public pages, open for everyone without a login. */
+  const isPublicPath = $derived(route.path.startsWith('/c/'));
 
   $effect(() => {
-    if (session.loading) return;
+    if (session.loading || isPublicPath) return;
     if (!session.me && route.path !== '/login') navigate('/login', true);
     else if (session.me && route.path === '/login') navigate('/', true);
   });
@@ -26,7 +28,9 @@
   </div>
 {/if}
 
-{#if session.loading && !session.me}
+{#if isPublicPath}
+  <Shell />
+{:else if session.loading && !session.me}
   <main class="center"><p class="muted">Laden…</p></main>
 {:else if !session.me}
   <Login />

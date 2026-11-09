@@ -1,3 +1,5 @@
+import { publicClub } from './viewer.svelte';
+
 // URLs of the app. A VTTL match id has a slash ("PWVL03/045"); in a URL it becomes a dash.
 
 export const matchSlug = (matchId: string) => matchId.replace('/', '-');
@@ -7,11 +9,21 @@ export function matchIdFromSlug(slug: string) {
   return i < 0 ? slug : `${slug.slice(0, i)}/${slug.slice(i + 1)}`;
 }
 
+/** "/c/{club}" on public pages (another club, or no login), else "". */
+const prefix = () => {
+  const c = publicClub();
+  return c ? `/c/${encodeURIComponent(c)}` : '';
+};
+
 export const urls = {
-  day: (day: string) => `/dag/${day}`,
-  match: (matchId: string) => `/wedstrijd/${matchSlug(matchId)}`,
-  lineup: (matchId: string) => `/wedstrijd/${matchSlug(matchId)}/opstelling`,
+  home: () => prefix() || '/',
+  day: (day: string) => `${prefix()}/dag/${day}`,
+  match: (matchId: string) => `${prefix()}/wedstrijd/${matchSlug(matchId)}`,
+  lineup: (matchId: string) => `${prefix()}/wedstrijd/${matchSlug(matchId)}/opstelling`,
   settings: () => '/instellingen',
+  /** The link to share: always with the club, so it works for everyone without a login. */
+  share: (club: string, matchId: string | null, day: string) =>
+    `/c/${encodeURIComponent(club)}${matchId ? `/wedstrijd/${matchSlug(matchId)}` : `/dag/${day}`}`,
 };
 
 /** ISO day plus or minus n days. */

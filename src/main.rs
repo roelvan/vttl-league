@@ -3,6 +3,7 @@ mod app;
 mod auth;
 mod boards;
 mod crypto;
+mod public;
 mod db;
 mod scoreboard;
 mod sheets;

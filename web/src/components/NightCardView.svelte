@@ -17,7 +17,7 @@
     {#if card.state === 'live'}
       <span class="chip live">Live</span>
     {:else if card.state === 'final'}
-      <span class="chip" class:win={card.outcome === 'won'}>{card.outcome ? outcomeText[card.outcome] : 'Einde'} {card.homeScore}–{card.awayScore}</span>
+      <span class="chip" class:win={card.outcome === 'won'}>{card.outcome ? outcomeText[card.outcome] : 'Einde'} {card.isHome ? `${card.homeScore}–${card.awayScore}` : `${card.awayScore}–${card.homeScore}`}</span>
     {:else if card.state === 'bye'}
       <span class="chip">Bye</span>
     {:else}

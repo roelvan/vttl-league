@@ -5,6 +5,7 @@
   import { settings, toggleTheme } from '../lib/settings.svelte';
   import { session, logout } from '../lib/session.svelte';
   import { ws, pendingCount } from '../lib/workspace.svelte';
+  import { publicClub } from '../lib/viewer.svelte';
 
   let {
     section,
@@ -43,17 +44,17 @@
 
 <header class="topbar">
   <div class="topbar-in">
-    <a class="brand" href="/" onclick={link}>
+    <a class="brand" href={urls.home()} onclick={link}>
       <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="20" cy="12" r="7" fill="var(--home)" /><path d="M4 26 14 16" stroke="var(--fg)" stroke-width="3.2" stroke-linecap="round" /><circle cx="9" cy="22" r="5.5" fill="none" stroke="var(--fg)" stroke-width="2.6" /></svg>
       <span class="label">Interclub Live</span>
     </a>
     <nav class="topnav" aria-label="Hoofdmenu">
-      <a href={matchId ? urls.match(matchId) : '/'} onclick={link} class:disabled={!matchId} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
-      <a href={matchId ? urls.lineup(matchId) : '/'} onclick={link} class:disabled={!matchId} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
+      <a href={matchId ? urls.match(matchId) : urls.home()} onclick={link} class:disabled={!matchId} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
+      <a href={matchId ? urls.lineup(matchId) : urls.home()} onclick={link} class:disabled={!matchId} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
     </nav>
     <span class="spacer"></span>
     {#if datechip}<span class="datechip">{datechip}</span>{/if}
-    {#if session.me}<span class="sync-dot {sync}" title={syncText} role="img" aria-label={syncText}></span>{/if}
+    {#if session.me && !publicClub()}<span class="sync-dot {sync}" title={syncText} role="img" aria-label={syncText}></span>{/if}
     <button class="btn ghost icon-btn" type="button" onclick={toggleTheme} aria-label="Wissel licht of donker">
       <Icon name={settings.theme === 'dark' ? 'sun' : 'moon'} />
     </button>
@@ -72,7 +73,7 @@
             <hr />
           {/if}
           {#if matchId}<button role="menuitem" type="button" onclick={() => pick('share')}><Icon name="share" />Publieke link kopiëren</button>{/if}
-          {#if session.me}
+          {#if session.me && !publicClub()}
             <button role="menuitem" type="button" onclick={() => ((open = false), navigate(urls.settings()))}><Icon name="settings" />Scoreborden</button>
             <button role="menuitem" type="button" onclick={() => ((open = false), navigate('/ik'))}><Icon name="user" />Wie ben ik?</button>
           {/if}

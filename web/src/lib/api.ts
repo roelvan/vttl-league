@@ -118,6 +118,13 @@ export const api = {
   deleteDevice: (id: string) => request<void>('DELETE', `/api/devices?id=${encodeURIComponent(id)}`),
   boardStates: () => request<BoardState[]>('GET', '/api/boards'),
   linkBoard: (b: BoardLink) => request<BoardState>('POST', '/api/boards/link', b),
+  // Public, read-only (no login): anyone with the link follows live.
+  publicClub: (club: string) => request<MatchList & { club: Club | null }>('GET', `/api/public/club?club=${encodeURIComponent(club)}`),
+  publicSheets: (club: string, day: string) =>
+    request<StoredSheet[]>('GET', `/api/public/sheets?club=${encodeURIComponent(club)}&day=${encodeURIComponent(day)}`),
+  publicSheet: (club: string, id: string) => request<StoredSheet>('GET', `/api/public/sheet?club=${encodeURIComponent(club)}&id=${encodeURIComponent(id)}`),
+  publicMatch: (club: string, id: string) => request<TeamMatch>('GET', `/api/public/match?club=${encodeURIComponent(club)}&id=${encodeURIComponent(id)}`),
+  publicBoards: (club: string) => request<{ devices: Device[]; states: BoardState[] }>('GET', `/api/public/boards?club=${encodeURIComponent(club)}`),
   sheetOps: (id: string, clientId: string, seq: number, ops: Op[]) =>
     request<{ rev: number; seq: number }>('POST', '/api/sheet/ops', { id, clientId, seq, ops }),
 };

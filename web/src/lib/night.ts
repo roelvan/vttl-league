@@ -11,6 +11,12 @@ function gameCount(row: MatchRow) {
   return id != null ? (SYSTEMS[id]?.games.length ?? 0) : 0;
 }
 
+/** "Afdeling 1 - Prov. West-Vl. - Heren" -> "Afdeling 1 · Heren" */
+export function shortDivision(name: string) {
+  const p = name.split(' - ').map((x) => x.trim()).filter(Boolean);
+  return p.length > 2 ? `${p[0]} · ${p.at(-1)}` : p.join(' · ');
+}
+
 export type NightState = 'live' | 'final' | 'soon' | 'bye';
 
 export interface NightCard {
@@ -35,7 +41,7 @@ function parseScore(s: string): [number, number] | null {
 }
 
 export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
-  const division = row.divisionName ?? '';
+  const division = shortDivision(row.divisionName ?? '');
   if (row.isBye) {
     return { row, division, isHome: row.isHome, homeScore: null, awayScore: null, segments: [], played: 0, total: 0, state: 'bye', tables: '', outcome: null };
   }

@@ -1,19 +1,24 @@
 <script lang="ts">
   import NightCardView from './NightCardView.svelte';
   import Icon from './Icon.svelte';
-  import { data } from '../lib/data.svelte';
   import { ws, loadDay } from '../lib/workspace.svelte';
   import { nightCard, matchesOn, matchDays } from '../lib/night';
   import { navigate } from '../lib/router.svelte';
   import { urls } from '../lib/nav';
   import { longDate, todayIso } from '../lib/format';
+  import type { MatchRow } from '../lib/types';
 
-  let { day, currentId = null, filters = true }: { day: string; currentId?: string | null; filters?: boolean } = $props();
+  let {
+    day,
+    rows,
+    loaded,
+    currentId = null,
+    filters = true,
+  }: { day: string; rows: MatchRow[]; loaded: boolean; currentId?: string | null; filters?: boolean } = $props();
 
   type Filter = 'all' | 'live' | 'home' | 'away';
   let filter = $state<Filter>('all');
 
-  const rows = $derived(data.matches?.matches ?? []);
   const days = $derived(matchDays(rows));
   const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, ws.entries[r.matchId]?.view)));
   const liveCount = $derived(cards.filter((c) => c.state === 'live').length);
@@ -58,7 +63,7 @@
     <NightCardView card={c} current={c.row.matchId === currentId} />
   {:else}
     <div class="card empty">
-      {#if !data.matches}
+      {#if !loaded}
         <p>Wedstrijden laden…</p>
       {:else if cards.length}
         <p>Geen wedstrijden voor deze filter.</p>

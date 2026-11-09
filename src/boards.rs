@@ -214,7 +214,7 @@ pub fn parse_topic(topic: &str) -> Option<(&str, &str, &str)> {
 impl Boards {
     /// Connects when MQTT_URL is set (mqtt://host:port), with MQTT_USER / MQTT_PASSWORD.
     pub fn connect() -> (Self, Option<rumqttc::EventLoop>) {
-        let Ok(url) = std::env::var("MQTT_URL") else {
+        let Some(url) = std::env::var("MQTT_URL").ok().filter(|u| !u.trim().is_empty()) else {
             tracing::warn!("MQTT_URL not set: scoreboards are off");
             return (Self { client: None, live: Mutex::new(HashMap::new()) }, None);
         };

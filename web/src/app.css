@@ -172,7 +172,7 @@ button.chip { cursor: pointer; }
 
 /* ------------------------------------------------------------------ shell */
 .shell {
-  display: grid; gap: 16px;
+  display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr);
   padding: 16px max(16px, env(safe-area-inset-right, 0px)) 104px max(16px, env(safe-area-inset-left, 0px));
 }
 .view { display: grid; gap: 16px; min-width: 0; align-content: start; }
@@ -290,7 +290,8 @@ button.chip { cursor: pointer; }
 .night-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .night-head h2 { font: 650 20px/1.15 var(--font); }
 .daynav { display: flex; align-items: center; gap: 6px; }
-.daynav .day { flex: 1; text-align: center; font-weight: 700; text-transform: capitalize; position: relative; min-width: 0; }
+.daynav .day { flex: 1; text-align: center; font-weight: 700; position: relative; min-width: 0; }
+.daynav .day::first-letter { text-transform: uppercase; }
 .daynav .day input { position: absolute; inset: 0; opacity: 0; cursor: pointer; min-height: 0; }
 .daynav .btn { min-height: 38px; width: 38px; padding: 0; }
 .night-list { display: grid; gap: 10px; }

@@ -8,6 +8,7 @@
   import Icon from '../components/Icon.svelte';
   import { ws } from '../lib/workspace.svelte';
   import { liveView, type GameView } from '../lib/live';
+  import { shortDivision } from '../lib/night';
   import { canEdit } from '../lib/access';
   import { boardFor, livePointsFor, sendToBoard } from '../lib/boards.svelte';
   import { link } from '../lib/router.svelte';
@@ -45,7 +46,7 @@
     {#if !sheet}<p>Wedstrijd laden…</p>{:else}<p>Dit matchsysteem kent de app niet ({sheet.matchSystemId}).</p>{/if}
   </div>
 {:else}
-  <ScoreHeader {sheet} {view} week={row?.week ?? ''} division={row?.divisionName ?? sheet.series} />
+  <ScoreHeader {sheet} {view} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series} />
 
   {#if sheet.vttlLocked}
     <div class="banner"><Icon name="check" />VTTL heeft deze uitslag gevalideerd. Niemand kan nog iets wijzigen.</div>
