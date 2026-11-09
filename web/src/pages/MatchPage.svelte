@@ -8,7 +8,7 @@
   import StatsDialog from '../components/match/StatsDialog.svelte';
   import Icon from '../components/Icon.svelte';
   import { ws } from '../lib/workspace.svelte';
-  import { liveView, type GameView } from '../lib/live';
+  import { liveView, tally, type GameView, type TallyRow } from '../lib/live';
   import { shortDivision } from '../lib/night';
   import { canEdit } from '../lib/access';
   import { boardFor, liveGamesFor, playFor, sendToBoard, timeoutsUsedFor } from '../lib/boards.svelte';
@@ -40,6 +40,23 @@
   const boards = $derived(view ? view.tables.map((t) => (t.device ? boardFor(matchId, t.device, view.sys.boxes) : null)) : []);
   const liveGames = $derived(view ? liveGamesFor(matchId, view) : {});
   const timeoutsUsed = $derived(sheet && view ? timeoutsUsedFor(matchId, sheet, view) : {});
+
+  /** Keys of the rows picked in the Spelers card. */
+  let picked = $state<string[]>([]);
+  /** Key of the row under the pointer; it previews only that player's games. */
+  let hovered = $state<string | null>(null);
+  const focus = $derived.by(() => {
+    const keys = hovered ? [hovered] : picked;
+    if (!keys.length || !sheet || !view) return null;
+    const rows = [...tally(sheet, view, 'home'), ...tally(sheet, view, 'away')].filter((r) => keys.includes(r.key));
+    return new Set(rows.flatMap((r) => r.games));
+  });
+  $effect(() => {
+    void matchId;
+    picked = [];
+    hovered = null;
+  });
+  const togglePlayer = (r: TallyRow) => (picked = picked.includes(r.key) ? picked.filter((k) => k !== r.key) : [...picked, r.key]);
 
   /** The game whose scoreboard statistics are open. */
   let stats = $state<number | null>(null);
@@ -90,11 +107,11 @@
         </a>
       {/if}
 
-      <MatchOrder {view} live={liveGames} {timeoutsUsed} onopen={(g) => (entry = g.index)} />
+      <MatchOrder {view} live={liveGames} {timeoutsUsed} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
     </div>
 
     <div class="match-aside">
-      <PlayersTally {sheet} {view} />
+      <PlayersTally {sheet} {view} {picked} ontoggle={togglePlayer} onhover={(r) => (hovered = r?.key ?? null)} />
       <MatchDetails {sheet} {view} onaction={canPrint ? onaction : undefined} canUpload={editable} />
       {#if editable}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>

@@ -11,7 +11,10 @@
     live = null,
     used = null,
     onopen,
+    dim = false,
   }: {
+    /** Not a game of the players picked in the Spelers card. */
+    dim?: boolean;
     /** [home, away] took their timeout; null = no scoreboard data. */
     used?: [boolean, boolean] | null;
     game: GameView;
@@ -89,6 +92,7 @@
   this={onopen ? 'button' : 'div'}
   class="mt is-{game.state === 'final' ? 'final' : game.state}"
   class:static={!onopen}
+  class:dim
   type={onopen ? 'button' : undefined}
   role={onopen ? undefined : 'group'}
   style="--boxes: {boxes}"

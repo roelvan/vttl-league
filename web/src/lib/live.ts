@@ -238,11 +238,25 @@ export function liveView(sheet: Sheet): LiveView {
 export type Pip = 'w' | 'l' | 'live' | '';
 
 export interface TallyRow {
+  /** Stable selection key: side and slot index. */
+  key: string;
   label: string;
   person: Person;
   pips: Pip[];
   wins: number;
   losses: number;
+  /** Game indexes of this row, and for a single player also the doubles they play in. */
+  games: number[];
+}
+
+/** Player indexes (0-based) of a double slot. */
+function doublePlayers(sheet: Sheet, sys: MatchSystem, side: Side, slot: number): number[] {
+  const s = sys.slots[slot];
+  if (s?.kind !== 'double') return [];
+  return (sheet[side].doubles[s.double] ?? '')
+    .split('/')
+    .map((x) => Number(x) - 1)
+    .filter((i) => i >= 0);
 }
 
 /** One row per single-player slot (and one per double slot), with a pip per game. */
@@ -260,12 +274,20 @@ export function tally(sheet: Sheet, view: LiveView, side: Side): TallyRow[] {
       slot.kind === 'double'
         ? { full: people.map((x) => x.last).join(' / ') || 'Dubbel', last: 'Dubbel', initial: '', ranking: '' }
         : (people[0] ?? person(''));
+    const doubles =
+      slot.kind === 'single'
+        ? view.games.filter((g) =>
+            gameSlots(sheet, sys, g.index, side).some((sj) => doublePlayers(sheet, sys, side, sj).includes(slot.player)),
+          )
+        : [];
     rows.push({
+      key: `${side}:${si}`,
       label: letter(sys, si, side),
       person: p,
       pips,
       wins: pips.filter((x) => x === 'w').length,
       losses: pips.filter((x) => x === 'l').length,
+      games: [...games, ...doubles].map((g) => g.index).sort((a, b) => a - b),
     });
   });
   return rows;
