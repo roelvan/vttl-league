@@ -208,7 +208,7 @@ export const GAME_STATUS_TEXT: Partial<Record<VttlStatus, string>> = {
 };
 
 export const STATUS_TEXT: Record<VttlStatus, string> = {
-  locked: 'Gevalideerd door VTTL (alleen lezen)',
+  locked: 'Gevalideerd door VTTL',
   error: 'De laatste upload naar VTTL is mislukt',
   synced: 'VTTL heeft dezelfde gegevens als dit wedstrijdblad',
   pending: 'Dit wedstrijdblad heeft wijzigingen die nog niet op VTTL staan',

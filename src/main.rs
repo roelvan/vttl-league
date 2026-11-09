@@ -26,6 +26,8 @@ use tower_http::services::{ServeDir, ServeFile};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
+    // reqwest and rumqttc enable both rustls providers: pick one, or TLS panics.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     tracing_subscriber::fmt()
         .with_env_filter(var("RUST_LOG").unwrap_or_else(|_| "info".into()))
         .init();

@@ -1,7 +1,8 @@
 //! Scoreboards (Flippr / ESP32) over MQTT.
 //!
 //! Each club registers its boards (device id + alias). A captain links a board to one game of a
-//! match with "Naar scorebord": the server sends the player names to the board (config topic)
+//! match with "Naar scorebord": the server sends the player names to the board (config topic),
+//! starts a new board match with the away player serving (command topic)
 //! and stores the link. Updates (`tabletennis/{device}/{boardMatch}/update`) count only for a
 //! linked device; the first update after the link fixes the board's own match id, and updates
 //! for any other board match are ignored. When the board match is finished, the server writes
@@ -12,9 +13,10 @@ use crate::api::ApiError;
 use crate::app::App;
 use crate::auth::User;
 use crate::db::{self, Db};
-use crate::scoreboard::{self, MatchState};
+use crate::scoreboard::{self, MatchState, Timeout};
 use crate::sheets::{Applied, Op};
 use axum::Json;
+use axum::http::StatusCode;
 use axum::extract::{Query, State};
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
 use rusqlite::{OptionalExtension, params};
@@ -53,8 +55,16 @@ pub struct BoardState {
     pub current: (u8, u8),
     pub games: Vec<(u8, u8)>,
     pub server: u8,
+    /// Player (1 or 2) who served first in game 1.
+    pub first_server: u8,
+    /// Every point in order: '0' = home (player 1) won it, '1' = away.
+    pub points: String,
+    /// Match time on the board at the last update.
+    pub duration_ms: u32,
+    /// None = the board did not send timeout data.
+    pub timeout: Option<Timeout>,
     pub finished: bool,
-    /// Epoch ms.
+    /// Epoch ms (server time) of the last update.
     pub at: i64,
 }
 
@@ -77,7 +87,7 @@ pub struct Link {
     pub board_match: Option<String>,
 }
 
-/// The MQTT connection (None when MQTT_URL is not set) and the last state per board.
+/// The MQTT connection (None when MQTT_HOST is not set) and the last state per board.
 pub struct Boards {
     client: Option<AsyncClient>,
     live: Mutex<HashMap<String, BoardState>>,
@@ -180,6 +190,9 @@ pub enum Decision {
 }
 
 /// `topic_match` = the board's own match id from the topic ("" when the topic has none).
+/// Board player that serves first in a linked match: player 2 = the away player.
+const AWAY_SERVES: u8 = 2;
+
 pub fn decide(link: Option<&Link>, topic_match: &str) -> Decision {
     match link {
         None => Decision::Ignore,
@@ -213,17 +226,23 @@ pub fn parse_topic(topic: &str) -> Option<(&str, &str, &str)> {
 // ---------------------------------------------------------------- MQTT
 
 impl Boards {
-    /// Connects when MQTT_URL is set (mqtt://host:port), with MQTT_USER / MQTT_PASSWORD.
+    /// Connects when MQTT_HOST is set, with MQTT_PORT (default 1883, or 8883 with TLS),
+    /// MQTT_TLS (true/false) and MQTT_USER / MQTT_PASSWORD.
     pub fn connect() -> (Self, Option<rumqttc::EventLoop>) {
-        let Some(url) = std::env::var("MQTT_URL").ok().filter(|u| !u.trim().is_empty()) else {
-            tracing::warn!("MQTT_URL not set: scoreboards are off");
+        let env = |k: &str| std::env::var(k).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+        let Some(host) = env("MQTT_HOST") else {
+            tracing::warn!("MQTT_HOST not set: scoreboards are off");
             return (Self { client: None, live: Mutex::new(HashMap::new()) }, None);
         };
-        let rest = url.trim_start_matches("mqtt://").trim_start_matches("tcp://");
-        let (host, port) = rest.trim_end_matches('/').rsplit_once(':').map(|(h, p)| (h.to_string(), p.parse().unwrap_or(1883))).unwrap_or((rest.to_string(), 1883));
+        let tls = env("MQTT_TLS").is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"));
+        let port = env("MQTT_PORT").and_then(|p| p.parse().ok()).unwrap_or(if tls { 8883 } else { 1883 });
+        tracing::info!("MQTT: {host}:{port}{}", if tls { " (TLS)" } else { "" });
         let mut opts = MqttOptions::new(format!("vttl-league-{}", rand::random::<u32>()), host, port);
         opts.set_keep_alive(Duration::from_secs(30));
-        if let (Ok(u), Ok(p)) = (std::env::var("MQTT_USER"), std::env::var("MQTT_PASSWORD")) {
+        if tls {
+            opts.set_transport(rumqttc::Transport::tls_with_default_config());
+        }
+        if let (Some(u), Some(p)) = (env("MQTT_USER"), env("MQTT_PASSWORD")) {
             opts.set_credentials(u, p);
         }
         let (client, eventloop) = AsyncClient::new(opts, 64);
@@ -252,6 +271,15 @@ impl Boards {
             "player2FamilyName": scoreboard::display_name(&p2.last),
         });
         c.publish(format!("tabletennis/{device}/config"), QoS::AtLeastOnce, true, payload.to_string()).await?;
+        Ok(())
+    }
+
+    /// Starts a new match on the board (like vttl-api `publishDeviceCommand`). Not retained:
+    /// a board that reconnects later must not reset its score.
+    async fn start_match(&self, device: &str, starting_server: u8) -> anyhow::Result<()> {
+        let c = self.client.as_ref().ok_or_else(|| anyhow::anyhow!("MQTT is not configured"))?;
+        let payload = json!({ "command": "new", "payload": { "startingServer": starting_server } });
+        c.publish(format!("tabletennis/{device}/command"), QoS::AtLeastOnce, false, payload.to_string()).await?;
         Ok(())
     }
 }
@@ -312,6 +340,10 @@ fn on_publish(app: &Arc<App>, topic: &str, payload: &[u8]) -> anyhow::Result<()>
         current: s.current,
         games: s.games.clone(),
         server: s.server,
+        first_server: s.first_server,
+        points: s.points.clone(),
+        duration_ms: s.duration_ms,
+        timeout: s.timeout.clone(),
         finished: s.finished,
         at,
     };
@@ -324,11 +356,22 @@ fn on_publish(app: &Arc<App>, topic: &str, payload: &[u8]) -> anyhow::Result<()>
     Ok(())
 }
 
+/// What the match record keeps of a board game, for the stats after the game
+/// (web/src/lib/sheet/types.ts `BoardPlay`).
+pub fn board_play(s: &MatchState) -> Value {
+    let used = s.timeout.as_ref().map(|t| json!([t.p1_used, t.p2_used])).unwrap_or(Value::Null);
+    json!({ "points": s.points, "firstServer": s.first_server, "durationMs": s.duration_ms, "timeoutsUsed": used })
+}
+
 /// Puts the set scores of a finished board match into the match record, like a client edit.
+/// The point sequence goes into `boardPlay[game]` for the stats.
 fn write_result(app: &Arc<App>, link: &Link, s: &MatchState) -> anyhow::Result<()> {
     let Some(sheet) = app.db.sheet(&link.club, &link.sheet)? else { return Ok(()) };
     let boxes = sheet.doc["results"][link.game as usize].as_array().map(|a| a.len()).unwrap_or(s.best_of as usize).max(s.games.len());
-    let ops = vec![Op { p: vec![json!("results"), json!(link.game)], v: result_boxes(s, boxes) }];
+    let ops = vec![
+        Op { p: vec![json!("results"), json!(link.game)], v: result_boxes(s, boxes) },
+        Op { p: vec![json!("boardPlay"), json!(link.game)], v: board_play(s) },
+    ];
     let client = format!("board:{}", link.device);
     let seq = now_ms();
     if let Some(Applied::Done(rev)) = app.db.apply_ops(&link.club, &link.sheet, &client, seq, &ops, &link.account)? {
@@ -355,11 +398,12 @@ fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || "-_.:".contains(c))
 }
 
-pub async fn save_device(State(app): State<Arc<App>>, u: User, Json(b): Json<DeviceBody>) -> Result<(), ApiError> {
+pub async fn save_device(State(app): State<Arc<App>>, u: User, Json(b): Json<DeviceBody>) -> Result<StatusCode, ApiError> {
     if !valid_id(b.id.trim()) || b.alias.len() > 80 {
         return Err(ApiError::BadRequest("Ongeldig ID: gebruik letters, cijfers, - _ . of :".into()));
     }
-    Ok(app.db.save_device(u.club()?, b.id.trim(), b.alias.trim())?)
+    app.db.save_device(u.club()?, b.id.trim(), b.alias.trim())?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]
@@ -367,8 +411,9 @@ pub struct IdQuery {
     id: String,
 }
 
-pub async fn delete_device(State(app): State<Arc<App>>, u: User, Query(q): Query<IdQuery>) -> Result<(), ApiError> {
-    Ok(app.db.delete_device(u.club()?, &q.id)?)
+pub async fn delete_device(State(app): State<Arc<App>>, u: User, Query(q): Query<IdQuery>) -> Result<StatusCode, ApiError> {
+    app.db.delete_device(u.club()?, &q.id)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// The last state of every linked board of the club (for a page that opens mid-game).
@@ -396,7 +441,7 @@ pub struct LinkBody {
 pub async fn link(State(app): State<Arc<App>>, u: User, Json(b): Json<LinkBody>) -> Result<Json<BoardState>, ApiError> {
     let club = u.club()?;
     if !app.boards.enabled() {
-        return Err(ApiError::BadRequest("De server heeft geen MQTT-verbinding (MQTT_URL).".into()));
+        return Err(ApiError::BadRequest("De server heeft geen MQTT-verbinding (MQTT_HOST).".into()));
     }
     if !app.db.has_device(club, &b.device)? {
         return Err(ApiError::NotFound(format!("Scorebord {} hoort niet bij deze club", b.device)));
@@ -406,6 +451,8 @@ pub async fn link(State(app): State<Arc<App>>, u: User, Json(b): Json<LinkBody>)
         return Err(ApiError::BadRequest("Ongeldige wedstrijd".into()));
     }
     app.boards.send_names(&b.device, &b.player1, &b.player2).await.map_err(|e| ApiError::BadRequest(format!("Scorebord: {e}")))?;
+    // The away player (player 2) always serves first.
+    app.boards.start_match(&b.device, AWAY_SERVES).await.map_err(|e| ApiError::BadRequest(format!("Scorebord: {e}")))?;
     app.db.link_board(&Link {
         device: b.device.clone(),
         club: club.to_string(),
@@ -414,7 +461,20 @@ pub async fn link(State(app): State<Arc<App>>, u: User, Json(b): Json<LinkBody>)
         account: u.account.account.clone(),
         board_match: None,
     })?;
-    let state = BoardState { device: b.device.clone(), sheet: Some(b.sheet), game: Some(b.game), current: (0, 0), games: vec![], server: 1, finished: false, at: now_ms() };
+    let state = BoardState {
+        device: b.device.clone(),
+        sheet: Some(b.sheet),
+        game: Some(b.game),
+        current: (0, 0),
+        games: vec![],
+        server: AWAY_SERVES,
+        first_server: AWAY_SERVES,
+        points: String::new(),
+        duration_ms: 0,
+        timeout: None,
+        finished: false,
+        at: now_ms(),
+    };
     app.boards.set_state(state.clone());
     app.push(club, json!({ "type": "board", "device": b.device, "state": state }));
     Ok(Json(state))
@@ -446,10 +506,18 @@ mod tests {
 
     #[test]
     fn boxes_from_board() {
-        let s = MatchState { duration_ms: 0, best_of: 5, point_count: 0, games: vec![(11, 7), (4, 11), (12, 10), (11, 5)], current: (0, 0), games_won: (3, 1), server: 1, finished: true, timeout: None };
+        let s = MatchState { duration_ms: 0, best_of: 5, point_count: 0, games: vec![(11, 7), (4, 11), (12, 10), (11, 5)], current: (0, 0), games_won: (3, 1), server: 1, first_server: 2, points: "01".into(), finished: true, timeout: None };
         let v = result_boxes(&s, 5);
         assert_eq!(v[1], json!({ "l": "4", "r": "11" }));
         assert_eq!(v[4], json!({ "l": "", "r": "" }));
+    }
+
+    #[test]
+    fn board_play_for_the_record() {
+        let mut s = MatchState { duration_ms: 90_000, best_of: 5, point_count: 2, games: vec![], current: (1, 1), games_won: (0, 0), server: 2, first_server: 2, points: "01".into(), finished: false, timeout: None };
+        assert_eq!(board_play(&s), json!({ "points": "01", "firstServer": 2, "durationMs": 90_000, "timeoutsUsed": null }));
+        s.timeout = Some(Timeout { active: false, owner: 0, p1_used: true, p2_used: false, expired: false, deadline: 0 });
+        assert_eq!(board_play(&s)["timeoutsUsed"], json!([true, false]));
     }
 
     #[test]

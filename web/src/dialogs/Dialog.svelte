@@ -7,11 +7,12 @@
   let {
     title,
     chip = '',
+    live = false,
     onclose,
     children,
     footer,
     wide = false,
-  }: { title: string; chip?: string; onclose: () => void; children: Snippet; footer?: Snippet; wide?: boolean } = $props();
+  }: { title: string; chip?: string; live?: boolean; onclose: () => void; children: Snippet; footer?: Snippet; wide?: boolean } = $props();
 
   let el: HTMLDialogElement | undefined = $state();
   const titleId = `dlg-${Math.random().toString(36).slice(2, 8)}`;
@@ -50,7 +51,7 @@
   <div class="grab"></div>
   <div class="sheet-h">
     <h2 id={titleId}>{title}</h2>
-    {#if chip}<span class="chip">{chip}</span>{/if}
+    {#if chip}<span class="chip" class:live>{chip}</span>{/if}
     <span class="spacer"></span>
     <button class="x" type="button" aria-label="Sluiten" onclick={onclose}><Icon name="close" size={18} /></button>
   </div>

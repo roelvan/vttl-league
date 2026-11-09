@@ -33,4 +33,4 @@ export function addDays(iso: string, n: number) {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }
 
-export type MenuAction = 'print' | 'slips' | 'validate' | 'upload' | 'share' | 'about';
+export type MenuAction = 'print' | 'slips' | 'validate' | 'upload' | 'share';

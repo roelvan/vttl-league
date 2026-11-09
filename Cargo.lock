@@ -2033,6 +2033,7 @@ dependencies = [
  "reqwest",
  "rumqttc",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",

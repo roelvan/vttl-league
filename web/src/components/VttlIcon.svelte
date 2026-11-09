@@ -4,7 +4,7 @@
 
   let { status, title }: { status: VttlStatus | 'played' | null; title?: string } = $props();
 
-  const glyph = { synced: 'check', pending: 'upload', error: 'warn', locked: 'check', played: 'check' } as const;
+  const glyph = { synced: 'check', pending: 'upload', error: 'warn', locked: 'lock', played: 'check' } as const;
   const text = $derived(title ?? (status === 'played' ? 'Uitslag staat op VTTL' : status ? STATUS_TEXT[status as VttlStatus] : ''));
 </script>
 

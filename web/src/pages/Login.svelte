@@ -1,7 +1,6 @@
 <script lang="ts">
   import { api, ApiError, OfflineError } from '../lib/api';
   import { setMe } from '../lib/session.svelte';
-  import Credits from '../components/Credits.svelte';
 
   let account = $state('');
   let password = $state('');
@@ -35,6 +34,5 @@
     <label class="field">Wachtwoord <input type="password" bind:value={password} autocomplete="current-password" required /></label>
     {#if error}<p class="error">{error}</p>{/if}
     <button class="btn big" type="submit" disabled={busy}>{busy ? 'Bezig…' : 'Aanmelden'}</button>
-    <Credits />
   </form>
 </main>

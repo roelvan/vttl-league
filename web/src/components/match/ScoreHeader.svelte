@@ -11,13 +11,12 @@
   const status = $derived(
     sheet.vttlLocked ? 'Gevalideerd' : view.complete ? 'Einde' : view.started ? 'live' : sheet.startHour ? `Om ${sheet.startHour}` : 'Nog niet begonnen',
   );
-  const played = $derived(view.games.filter((g) => g.state === 'final').length);
-  const drawText = $derived(n % 2 === 0 ? `${n / 2}–${n / 2} is gelijk` : '');
 </script>
 
 <section class="card board" aria-label="Stand van de ploegenwedstrijd">
   <div class="board-meta">
-    {#if division}<span>{division}</span><span class="dot"></span>{/if}
+    <!-- shortDivision joins its parts with " · ": show them with the same dots as the rest. -->
+    {#each division.split(' · ').filter(Boolean) as part, i (i)}<span>{part}</span><span class="dot"></span>{/each}
     {#if week}<span class="hide-sm">Week {week}</span><span class="dot hide-sm"></span>{/if}
     <span class="num">{sheet.matchId}</span>
     <span class="spacer"></span>
@@ -42,10 +41,6 @@
     <div class="race-bar" style="grid-template-columns: repeat({n}, 1fr)">
       {#each segs as s, i (i)}<span class="seg {s}" title="Wedstrijd {i + 1}"></span>{/each}
       <span class="mark" style="left: {markLeft}" title="{view.needed} overwinningen winnen de avond"></span>
-    </div>
-    <div class="race-legend">
-      <span><b>{played}</b> / {n} gespeeld</span>
-      <span class="mid">{view.needed} wint de avond{drawText ? ` · ${drawText}` : ''}</span>
     </div>
   </div>
 </section>

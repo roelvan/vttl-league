@@ -20,6 +20,7 @@
     tableNo = null,
     boardBusy = false,
     onclose,
+    onstats,
   }: {
     id: string;
     sheet: Sheet;
@@ -29,6 +30,8 @@
     /** The game is live on a scoreboard: read-only until it ends. */
     boardBusy?: boolean;
     onclose: () => void;
+    /** Set when a scoreboard counted this game: opens its statistics (after a save). */
+    onstats?: () => void;
   } = $props();
 
   const sys = $derived(getSystem(sheet.matchSystemId));
@@ -67,6 +70,17 @@
 
   const result = $derived(gameResult(boxes, sys, sheet.home.forfeit, sheet.away.forfeit));
   const perSet = $derived(boxes.map((s, i) => (isEmptySet(s) ? 'empty' : setWinner(i, s, sys))));
+  // A half-typed set is wrong, so errors show only for rows you left, or after "Klaar".
+  // Typing in a row hides its error again until you leave it.
+  let left = $state<number[]>([]);
+  let tried = $state(false);
+  const shown = (i: number) => tried || left.includes(i);
+  const bad = $derived(perSet.map((w, i) => w === 'error' && shown(i)));
+  const showError = $derived(tried ? result.won === 'error' : bad.some(Boolean));
+  function leaveRow(i: number, e: FocusEvent) {
+    const row = e.currentTarget as HTMLElement;
+    if (!row.contains(e.relatedTarget as Node | null) && !left.includes(i)) left.push(i);
+  }
   const homeSets = $derived(perSet.filter((w) => w === 'home' || w === 'homeFF').length);
   const awaySets = $derived(perSet.filter((w) => w === 'away' || w === 'awayFF').length);
   /** Sets after the decided one are switched off. */
@@ -85,18 +99,23 @@
       : gameNotation(result.won, boxes, sys),
   );
 
-  const names = (side: 'home' | 'away') => game[side].people.map((p) => (p.initial ? `${p.initial} ${p.last}` : p.last)).join(' / ') || game[side].label;
+  const names = (side: 'home' | 'away') => game[side].people.map((p) => (p.initial ? `${p.initial} ${p.last}` : p.last)).join(' / ') || 'Nog niet opgesteld';
 
   function oninput(i: number, side: 'l' | 'r', e: Event) {
     const inp = e.currentTarget as HTMLInputElement;
     const v = inp.value.toUpperCase().replace(/[^0-9WOF]/g, '');
     inp.value = v;
     boxes[i][side] = v;
+    left = left.filter((x) => x !== i);
+    tried = false;
     pushSoon();
   }
 
   function quick(q: 'home11' | 'away11' | 'clear' | 'homeWO' | 'awayWO') {
     const b = boxes[focus];
+    // A quick button takes the focus out of the row: the row is still being filled in.
+    left = left.filter((x) => x !== focus);
+    tried = false;
     if (q === 'clear') {
       b.l = '';
       b.r = '';
@@ -114,7 +133,17 @@
     pushSoon();
   }
 
+  /** "Klaar": a wrong score keeps the dialog open and shows why (it is saved anyway). */
   function save() {
+    push();
+    if (result.won === 'error') {
+      tried = true;
+      return;
+    }
+    onclose();
+  }
+
+  function close() {
     push();
     onclose();
   }
@@ -127,11 +156,11 @@
   }
 </script>
 
-<Dialog title="Wedstrijd {game.pos}" chip={tableNo ? `Tafel ${tableNo}${boardBusy ? ' · scorebord' : ''}` : game.state === 'final' ? 'Gespeeld' : 'Nog niet begonnen'} onclose={save}>
+<Dialog title="Wedstrijd {game.pos}" chip={tableNo ? `Tafel ${tableNo}${boardBusy ? ' · scorebord' : ''}` : game.state === 'final' ? 'Gespeeld' : 'Nog niet begonnen'} onclose={close}>
   <div class="vs">
-    <div class="p"><span class="letter h">{game.home.label.length > 2 ? 'D' : game.home.label}</span><span class="n">{names('home')}</span></div>
+    <div class="p"><span class="letter h"></span><span class="n">{names('home')}</span></div>
     <div class="sum" aria-label="{homeSets} tegen {awaySets} in sets"><span class="h">{homeSets}</span><span class="sep">–</span><span class="a">{awaySets}</span></div>
-    <div class="p r"><span class="letter a">{game.away.label.length > 2 ? 'D' : game.away.label}</span><span class="n">{names('away')}</span></div>
+    <div class="p r"><span class="letter a"></span><span class="n">{names('away')}</span></div>
   </div>
 
   {#if boardBusy}
@@ -147,7 +176,7 @@
   <div class="glines" onkeydown={onkey}>
     {#each boxes as b, i (i)}
       {@const w = perSet[i]}
-      <div class="gline" class:off={i > decidedAt}>
+      <div class="gline" class:off={i > decidedAt} onfocusout={(e) => leaveRow(i, e)}>
         <label for="g{i}h">Set {i + 1}</label>
         <input
           id="g{i}h"
@@ -159,9 +188,9 @@
           readonly={readonly}
           class:won={w === 'home' || w === 'homeFF'}
           class:h={true}
-          class:bad={w === 'error'}
-          aria-invalid={w === 'error' || undefined}
-          aria-describedby={result.won === 'error' ? 'score-error' : undefined}
+          class:bad={bad[i]}
+          aria-invalid={bad[i] || undefined}
+          aria-describedby={showError ? 'score-error' : undefined}
           oninput={(e) => oninput(i, 'l', e)}
           onfocus={() => (focus = i)}
         />
@@ -176,9 +205,9 @@
           readonly={readonly}
           class:won={w === 'away' || w === 'awayFF'}
           class:a={true}
-          class:bad={w === 'error'}
-          aria-invalid={w === 'error' || undefined}
-          aria-describedby={result.won === 'error' ? 'score-error' : undefined}
+          class:bad={bad[i]}
+          aria-invalid={bad[i] || undefined}
+          aria-describedby={showError ? 'score-error' : undefined}
           oninput={(e) => oninput(i, 'r', e)}
           onfocus={() => (focus = i)}
         />
@@ -197,13 +226,16 @@
   {/if}
 
   <div role="alert">
-    {#if result.won === 'error'}
+    {#if showError}
       <p class="error" id="score-error">Deze score klopt niet. Een set gaat tot {sys.pointCount}, met 2 punten verschil.</p>
     {/if}
   </div>
   <div class="code"><span>VTTL-notatie</span><code>{code || '–'}</code></div>
 
   {#snippet footer()}
+    {#if onstats}
+      <button class="btn big ghost" type="button" onclick={() => (push(), onstats())}><Icon name="stats" />Statistieken</button>
+    {/if}
     {#if readonly}
       <button class="btn big" type="button" onclick={onclose}>Sluiten</button>
     {:else}

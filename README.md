@@ -62,7 +62,7 @@ cargo test && pnpm check
   ScoreSheet's VttlScoreTemplate.xaml) and the referee slips (2x4, 1x8, per table). Printing uses
   the browser; "Opslaan als PDF" gives the PDF. Print class names have a `ps-`/`rs-` prefix so
   the screen CSS cannot leak in.
-- `src/boards.rs`, `src/scoreboard.rs`: scoreboards over MQTT (`MQTT_URL`, `MQTT_USER`,
+- `src/boards.rs`, `src/scoreboard.rs`: scoreboards over MQTT (`MQTT_HOST`, `MQTT_PORT`, `MQTT_TLS`, `MQTT_USER`,
   `MQTT_PASSWORD`; off when empty). Per club: device id + alias. "Naar scorebord" sends the
   names (`tabletennis/{id}/config`) and links the board to one game; updates of unlinked boards
   or another board match are ignored. A finished board match writes its set scores.

@@ -1,12 +1,20 @@
 <script lang="ts">
   import MatchTile from './MatchTile.svelte';
   import type { LiveView, GameView } from '../../lib/live';
+  import type { LiveGame } from '../../lib/boards.svelte';
 
   let {
     view,
-    livePoints = {},
+    live = {},
+    timeoutsUsed = {},
     onopen,
-  }: { view: LiveView; livePoints?: Record<number, [number, number]>; onopen: (g: GameView) => void } = $props();
+  }: {
+    view: LiveView;
+    live?: Record<number, LiveGame>;
+    /** Per game index: [home, away] took their timeout (scoreboard games only). */
+    timeoutsUsed?: Record<number, [boolean, boolean]>;
+    onopen: (g: GameView) => void;
+  } = $props();
 
   let filter = $state<'all' | 'todo'>('all');
   const shown = $derived(filter === 'todo' ? view.games.filter((g) => g.state !== 'final') : view.games);
@@ -24,7 +32,7 @@
   </div>
   <div class="order">
     {#each shown as g (g.index)}
-      <MatchTile game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} livePoints={livePoints[g.index] ?? null} {onopen} />
+      <MatchTile game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} live={live[g.index] ?? null} used={timeoutsUsed[g.index] ?? null} {onopen} />
     {:else}
       <p class="muted">Alle wedstrijden zijn gespeeld.</p>
     {/each}

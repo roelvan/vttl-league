@@ -4,6 +4,7 @@ use anyhow::{Result, bail};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Timeout {
     pub active: bool,
     /// 0 general, 1 player 1, 2 player 2
@@ -27,6 +28,10 @@ pub struct MatchState {
     pub games_won: (u8, u8),
     /// 1 or 2
     pub server: u8,
+    /// Player (1 or 2) who served first in game 1.
+    pub first_server: u8,
+    /// Every counted point in order: '0' = player 1 won it, '1' = player 2.
+    pub points: String,
     pub finished: bool,
     /// None = timeout state unknown (no extension, or a bad one).
     pub timeout: Option<Timeout>,
@@ -73,11 +78,13 @@ pub fn decode(p: &[u8]) -> Result<MatchState> {
     let (mut a, mut b) = (0u8, 0u8);
     let mut won = (0u8, 0u8);
     let mut finished = false;
+    let mut points = String::with_capacity(point_count as usize);
     for i in 0..point_count as usize {
         if finished {
             break;
         }
         let bit = (point_bytes[i / 8] >> (7 - (i % 8))) & 1;
+        points.push(if bit == 0 { '0' } else { '1' });
         if bit == 0 { a += 1 } else { b += 1 }
         if (a >= 11 || b >= 11) && a.abs_diff(b) >= 2 {
             games.push((a, b));
@@ -102,6 +109,8 @@ pub fn decode(p: &[u8]) -> Result<MatchState> {
         current: (a, b),
         games_won: won,
         server,
+        first_server: first_server + 1,
+        points,
         finished,
         timeout,
     })
@@ -148,6 +157,10 @@ mod tests {
         let s = decode(&payload(1, &[0; 33])).unwrap();
         assert_eq!(s.games, vec![(11, 0); 3]);
         assert!(s.finished);
+        assert_eq!(s.first_server, 2);
+        assert_eq!(s.points, "0".repeat(33));
+        // points after the end of the match are not counted
+        assert_eq!(decode(&payload(1, &[0; 40])).unwrap().points.len(), 33);
         // game 2 starts with the other server: meta says p2 first, game 2 -> p1
         let s = decode(&payload(1, &[0; 11])).unwrap();
         assert_eq!(s.server, 1);

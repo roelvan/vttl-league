@@ -3,7 +3,6 @@
   import BottomNav from '../components/BottomNav.svelte';
   import ClubNight from '../components/ClubNight.svelte';
   import Toast from '../components/Toast.svelte';
-  import Credits from '../components/Credits.svelte';
   import MatchPage from './MatchPage.svelte';
   import LineUpPage from './LineUpPage.svelte';
   import SettingsPage from './SettingsPage.svelte';
@@ -87,7 +86,7 @@
   });
 
   // ---------------------------------------------------------------- menu actions
-  type DialogState = { kind: 'print'; what: 'sheet' | 'slips' } | { kind: 'upload' } | { kind: 'validate'; errors: string[] } | { kind: 'about' } | null;
+  type DialogState = { kind: 'print'; what: 'sheet' | 'slips' } | { kind: 'upload' } | { kind: 'validate'; errors: string[] } | null;
   let dialog = $state<DialogState>(null);
   let printJob = $state<PrintJob | null>(null);
 
@@ -106,8 +105,7 @@
   });
 
   async function onaction(a: MenuAction) {
-    if (a === 'about') dialog = { kind: 'about' };
-    else if (a === 'share') {
+    if (a === 'share') {
       const club = viewClub();
       if (!club) return;
       const url = `${location.origin}${urls.share(club, m.id, day)}`;
@@ -145,7 +143,7 @@
 <TopBar
   section={m.section}
   matchId={navMatch}
-  datechip={row ? `${shortDate(row.date)}${row.week ? ` · week ${row.week}` : ''}` : pub ? (data.publicMatches[pub]?.club?.name ?? pub) : ''}
+  datechip={!row && pub ? (data.publicMatches[pub]?.club?.name ?? pub) : ''}
   {onaction}
   printActions={homeMatch}
   matchActions={ourMatch}
@@ -190,14 +188,6 @@
       <ul class="errors">{#each dialog.errors as e (e)}<li>{e}</li>{/each}</ul>
     {:else}
       <p class="ok">Geen validatiefouten gevonden.</p>
-    {/if}
-    {#snippet footer()}<button class="btn big" type="button" onclick={() => (dialog = null)}>OK</button>{/snippet}
-  </Dialog>
-{:else if dialog?.kind === 'about'}
-  <Dialog title="Over Interclub Live" onclose={() => (dialog = null)}>
-    <Credits long />
-    {#if session.me && !session.me.uploadEnabled}
-      <p class="hint">Proefmodus: de server stuurt nog niets echt naar VTTL.</p>
     {/if}
     {#snippet footer()}<button class="btn big" type="button" onclick={() => (dialog = null)}>OK</button>{/snippet}
   </Dialog>

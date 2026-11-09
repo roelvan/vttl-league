@@ -21,7 +21,7 @@
 </script>
 
 {#if !session.online}
-  <div class="offline" role="status">
+  <div class="offline-banner" role="status">
     {session.offlineKind === 'portal'
       ? 'De wifi vraagt om opnieuw aan te melden. Je wijzigingen blijven bewaard op dit toestel.'
       : 'Geen verbinding. Je wijzigingen blijven bewaard op dit toestel.'}

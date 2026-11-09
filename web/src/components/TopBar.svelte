@@ -47,10 +47,6 @@
 
 <header class="topbar">
   <div class="topbar-in">
-    <a class="brand" href={urls.home()} onclick={link}>
-      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="20" cy="12" r="7" fill="var(--home)" /><path d="M4 26 14 16" stroke="var(--fg)" stroke-width="3.2" stroke-linecap="round" /><circle cx="9" cy="22" r="5.5" fill="none" stroke="var(--fg)" stroke-width="2.6" /></svg>
-      <span class="label">Interclub Live</span>
-    </a>
     <nav class="topnav" aria-label="Hoofdmenu">
       <a href={matchId ? urls.match(matchId) : undefined} onclick={link} class:disabled={!matchId} aria-disabled={!matchId || undefined} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
       <a href={matchId ? urls.lineup(matchId) : undefined} onclick={link} class:disabled={!matchId} aria-disabled={!matchId || undefined} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
@@ -82,7 +78,6 @@
             <button type="button" onclick={() => ((open = false), navigate(urls.settings()))}><Icon name="settings" />Scoreborden</button>
             <button type="button" onclick={() => ((open = false), navigate('/ik'))}><Icon name="user" />Wie ben ik?</button>
           {/if}
-          <button type="button" onclick={() => pick('about')}><Icon name="info" />Over deze app</button>
           {#if session.me}
             <hr />
             <button type="button" onclick={() => ((open = false), logout())}><Icon name="logout" />Afmelden</button>

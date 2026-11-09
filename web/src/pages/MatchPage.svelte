@@ -5,12 +5,13 @@
   import PlayersTally from '../components/match/PlayersTally.svelte';
   import MatchDetails from '../components/match/MatchDetails.svelte';
   import ScoreEntry from '../components/match/ScoreEntry.svelte';
+  import StatsDialog from '../components/match/StatsDialog.svelte';
   import Icon from '../components/Icon.svelte';
   import { ws } from '../lib/workspace.svelte';
   import { liveView, type GameView } from '../lib/live';
   import { shortDivision } from '../lib/night';
   import { canEdit } from '../lib/access';
-  import { boardFor, livePointsFor, sendToBoard } from '../lib/boards.svelte';
+  import { boardFor, liveGamesFor, playFor, sendToBoard, timeoutsUsedFor } from '../lib/boards.svelte';
   import { link } from '../lib/router.svelte';
   import { urls, type MenuAction } from '../lib/nav';
   import type { MatchRow } from '../lib/types';
@@ -36,8 +37,15 @@
   let entry = $state<number | null>(null);
   const entryGame = $derived(entry !== null && view ? view.games[entry] : null);
   const tableOf = (g: GameView) => (g.table !== null && view ? view.tables[g.table] : null);
-  const boards = $derived(view ? view.tables.map((t) => (t.device ? boardFor(matchId, t.device) : null)) : []);
-  const livePoints = $derived(view ? livePointsFor(matchId, view) : {});
+  const boards = $derived(view ? view.tables.map((t) => (t.device ? boardFor(matchId, t.device, view.sys.boxes) : null)) : []);
+  const liveGames = $derived(view ? liveGamesFor(matchId, view) : {});
+  const timeoutsUsed = $derived(sheet && view ? timeoutsUsedFor(matchId, sheet, view) : {});
+
+  /** The game whose scoreboard statistics are open. */
+  let stats = $state<number | null>(null);
+  const statsGame = $derived(stats !== null && view ? view.games[stats] : null);
+  const statsPlay = $derived(stats !== null && sheet && view ? playFor(matchId, sheet, view, stats) : null);
+  const hasPlay = (g: GameView) => !!(sheet && view && playFor(matchId, sheet, view, g.index));
 
   function boardBusy(g: GameView) {
     const t = tableOf(g);
@@ -51,11 +59,11 @@
     {#if !sheet}<p>Wedstrijd laden…</p>{:else}<p>Dit matchsysteem kent de app niet ({sheet.matchSystemId}).</p>{/if}
   </div>
 {:else}
-  <ScoreHeader {sheet} {view} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series} />
-
   {#if sheet.vttlLocked}
-    <div class="banner"><Icon name="check" />VTTL heeft deze uitslag gevalideerd. Niemand kan nog iets wijzigen.</div>
+    <div class="banner"><Icon name="lock" />VTTL heeft deze uitslag gevalideerd. Niemand kan nog iets wijzigen.</div>
   {/if}
+
+  <ScoreHeader {sheet} {view} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series} />
 
   <div class="match-grid">
     <div class="match-main">
@@ -69,6 +77,7 @@
               board={boards[t.index]}
               onenter={(g) => (entry = g.index)}
               onsend={(g) => sendToBoard(matchId, sheet, t, g)}
+              onstats={(g) => (stats = g.index)}
             />
           {/each}
         </section>
@@ -81,7 +90,7 @@
         </a>
       {/if}
 
-      <MatchOrder {view} {livePoints} onopen={(g) => (entry = g.index)} />
+      <MatchOrder {view} live={liveGames} {timeoutsUsed} onopen={(g) => (entry = g.index)} />
     </div>
 
     <div class="match-aside">
@@ -107,6 +116,11 @@
       tableNo={tableOf(entryGame)?.no ?? null}
       boardBusy={boardBusy(entryGame)}
       onclose={() => (entry = null)}
+      onstats={hasPlay(entryGame) ? () => ((stats = entryGame.index), (entry = null)) : undefined}
     />
+  {/if}
+
+  {#if statsGame && statsPlay}
+    <StatsDialog game={statsGame} play={statsPlay} bestOf={view.sys.boxes} tableNo={tableOf(statsGame)?.no ?? null} onclose={() => (stats = null)} />
   {/if}
 {/if}

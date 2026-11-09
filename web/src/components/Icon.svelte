@@ -2,7 +2,7 @@
   // Line icons from the design (24x24, stroke = currentColor).
   type Name =
     | 'match' | 'night' | 'lineup' | 'sun' | 'moon' | 'more' | 'plus' | 'close' | 'chevron' | 'left' | 'right'
-    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh';
+    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats';
   let { name, size = 20 }: { name: Name; size?: number } = $props();
 </script>
 
@@ -35,10 +35,18 @@
     <path d="M4 12.5 9 17.5 20 6.5" />
   {:else if name === 'settings'}
     <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+  {:else if name === 'timer'}
+    <circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2.5M10 2h4" />
+  {:else if name === 'stats'}
+    <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+  {:else if name === 'captain'}
+    <circle cx="12" cy="12" r="9" /><path d="M15 9.5a3.5 3.5 0 1 0 0 5" />
   {:else if name === 'user'}
     <circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
   {:else if name === 'logout'}
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+  {:else if name === 'lock'}
+    <rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
   {:else if name === 'info'}
     <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" />
   {:else if name === 'board'}

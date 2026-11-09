@@ -1,18 +1,16 @@
 // Per-device preferences, kept in local storage.
 
-import type { SlipLayout } from './sheet/print';
-
 interface Settings {
   /** Dark is the default (design); the sun button switches. */
   theme: 'dark' | 'light';
-  slipLayout: SlipLayout;
 }
 
-const defaults: Settings = { theme: 'dark', slipLayout: '2x4' };
+const defaults: Settings = { theme: 'dark' };
 
 function load(): Settings {
   try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem('vl.settings') ?? '{}') };
+    const { theme } = JSON.parse(localStorage.getItem('vl.settings') ?? '{}');
+    return { ...defaults, ...(theme ? { theme } : {}) };
   } catch {
     return defaults;
   }

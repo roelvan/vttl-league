@@ -7,8 +7,9 @@
 import { api, ApiError } from './api';
 import { ws } from './workspace.svelte';
 import { publicClub } from './viewer.svelte';
-import type { Sheet } from './sheet/types';
+import type { BoardPlay, Sheet } from './sheet/types';
 import type { BoardLive, GameView, LiveView, TableView } from './live';
+import { playStats, type BoardTimeout } from './boardStats';
 
 export interface Device {
   id: string;
@@ -28,9 +29,26 @@ export interface BoardState {
   games: [number, number][];
   /** 1 = home serves, 2 = away. */
   server: 1 | 2;
+  /** Who served first in set 1: 1 = home, 2 = away. */
+  firstServer: 1 | 2;
+  /** Every point in order: '0' = home won it, '1' = away. */
+  points: string;
+  /** Match time on the board at the last update. */
+  durationMs: number;
+  /** null = the board did not send timeout data. */
+  timeout: BoardTimeout | null;
   finished: boolean;
-  /** Epoch ms of the last update. */
+  /** Epoch ms (server time) of the last update. */
   at: number;
+}
+
+/** A game with a point sequence: live from the board, or stored after the game. */
+export interface Play extends BoardPlay {
+  live: boolean;
+  /** Live only: server time of the last update, to let the duration run on. */
+  at: number | null;
+  /** Live only: the board's timeout state. */
+  timeout: BoardTimeout | null;
 }
 
 /** A board counts as online when it sent something in the last 2 minutes. */
@@ -72,28 +90,70 @@ export function onBoardMessage(msg: { device: string; state?: BoardState | null;
   if (d && msg.lastSeen) d.lastSeen = msg.lastSeen;
 }
 
-export function boardFor(matchId: string, device: string): BoardLive {
+/** @param bestOf sets of a game in this match system (view.sys.boxes) */
+export function boardFor(matchId: string, device: string, bestOf: number): BoardLive {
   const s = boards.live[device];
   const d = boards.devices.find((x) => x.id === device);
   const seen = Math.max(d?.lastSeen ?? 0, s?.at ?? 0);
   const linked = s && s.sheet === matchId ? s.game : null;
+  const running = linked !== null && !!s && !s.finished;
   return {
     alias: d?.alias || device,
     online: !!seen && Date.now() - seen < ONLINE_MS,
     linkedGame: linked,
-    points: linked !== null && s && !s.finished ? s.current : null,
+    points: running ? s.current : null,
+    sets: running ? s.games : [],
     server: linked !== null && s ? (s.server === 1 ? 'h' : 'a') : null,
+    timeout: running ? (s.timeout ?? null) : null,
+    moment: running && s.points !== undefined ? playStats(s.points, s.firstServer, bestOf).moment : null,
   };
 }
 
-/** Live points per game index, for the tiles of the match order. */
-export function livePointsFor(matchId: string, view: LiveView): Record<number, [number, number]> {
-  const out: Record<number, [number, number]> = {};
+/** What the tiles of the match order show of a game on a board. */
+export interface LiveGame {
+  points: [number, number];
+  /** Sets the board finished; the match record gets them when the game ends. */
+  sets: [number, number][];
+  timeout: BoardTimeout | null;
+}
+
+/** Live board data per game index, for the tiles of the match order. */
+export function liveGamesFor(matchId: string, view: LiveView): Record<number, LiveGame> {
+  const out: Record<number, LiveGame> = {};
   for (const t of view.tables) {
     const s = t.device ? boards.live[t.device] : undefined;
-    if (s && s.sheet === matchId && s.game !== null && !s.finished) out[s.game] = s.current;
+    if (s && s.sheet === matchId && s.game !== null && !s.finished) out[s.game] = { points: s.current, sets: s.games, timeout: s.timeout ?? null };
   }
   return out;
+}
+
+/** Per game index: [home, away] took their timeout. Live from the board while the game runs,
+ *  else what the server stored when the game ended. Games without board data are left out. */
+export function timeoutsUsedFor(matchId: string, sheet: Sheet, view: LiveView): Record<number, [boolean, boolean]> {
+  const out: Record<number, [boolean, boolean]> = {};
+  sheet.boardPlay?.forEach((p, i) => {
+    if (p?.timeoutsUsed) out[i] = p.timeoutsUsed;
+  });
+  for (const t of view.tables) {
+    const s = t.device ? boards.live[t.device] : undefined;
+    if (s && s.sheet === matchId && s.game !== null && !s.finished && s.timeout) out[s.game] = [s.timeout.p1Used, s.timeout.p2Used];
+  }
+  return out;
+}
+
+/** The point sequence of a game: live from its board, else what the server stored when the
+ *  game ended. Null when no scoreboard counted the game. */
+export function playFor(matchId: string, sheet: Sheet, view: LiveView, game: number): Play | null {
+  const stored = sheet.boardPlay?.[game];
+  for (const t of view.tables) {
+    const s = t.device ? boards.live[t.device] : undefined;
+    if (!s || s.sheet !== matchId || s.game !== game || s.points === undefined) continue;
+    // A finished game: the stored copy wins; the board state bridges the moment before it arrives.
+    if (s.finished && stored) break;
+    const used: [boolean, boolean] | null = s.timeout ? [s.timeout.p1Used, s.timeout.p2Used] : null;
+    return { points: s.points, firstServer: s.firstServer, durationMs: s.durationMs, timeoutsUsed: used, live: !s.finished, at: s.at, timeout: s.timeout };
+  }
+  return stored ? { ...stored, live: false, at: null, timeout: null } : null;
 }
 
 const upper = (s: string) => s.toUpperCase();

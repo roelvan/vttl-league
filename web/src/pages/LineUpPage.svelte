@@ -85,6 +85,8 @@
     if (!sheet?.started) change(matchId, [{ p: ['started'], v: true }]);
     navigate(urls.match(matchId));
   }
+  /** Enough rows for all lines of the text, at least 2. */
+  const rowsFor = (s: string) => Math.max(2, (s ?? '').split('\n').length);
 </script>
 
 {#if !sheet || !sys || !view}
@@ -124,7 +126,8 @@
                 <select id="tdev{i}" value={t.device ?? ''} disabled={!editable} onchange={(e) => setTable(i, { device: e.currentTarget.value || null })}>
                   <option value="">Geen (manueel)</option>
                   {#each boards.devices as d (d.id)}
-                    <option value={d.id}>{d.alias || d.id}{busyDevices.has(d.id) ? ` (ook bij ${busyDevices.get(d.id)})` : ''}</option>
+                    {@const other = tables.findIndex((x, j) => j !== i && x.device === d.id)}
+                    <option value={d.id} disabled={other >= 0}>{d.alias || d.id}{other >= 0 ? ` (al op ${other === 0 ? 'eerste' : 'tweede'} tafel)` : ''}{busyDevices.has(d.id) ? ` (ook bij ${busyDevices.get(d.id)})` : ''}</option>
                   {/each}
                 </select>
               </div>
@@ -194,27 +197,16 @@
           <input type="time" value={sheet.endHour} disabled={!editable} onchange={(e) => setField('endHour', e.currentTarget.value)} />
         </label>
         <label class="field wide">Zaal
-          <textarea rows="2" value={sheet.address} disabled={!editable} onchange={(e) => setField('address', e.currentTarget.value)}></textarea>
+          <textarea rows={rowsFor(sheet.address)} value={sheet.address} disabled={!editable} onchange={(e) => setField('address', e.currentTarget.value)}></textarea>
         </label>
         <label class="field wide">Opmerkingen (komen op het wedstrijdblad)
-          <textarea rows="2" value={sheet.comments} disabled={!editable} onchange={(e) => setField('comments', e.currentTarget.value)}></textarea>
+          <textarea rows={rowsFor(sheet.comments)} value={sheet.comments} disabled={!editable} onchange={(e) => setField('comments', e.currentTarget.value)}></textarea>
         </label>
       </div>
     </section>
 
     <section class="card">
-      <div class="card-h">
-        <span class="step-n">{doubleSlots.length ? 6 : 5}</span><h2>Wedstrijdvolgorde</h2><span class="spacer"></span><span class="eyebrow hide-sm">{sys.name}</span>
-      </div>
-      <div class="card-b" style="display:grid;gap:14px">
-        <div class="preview-order">
-          {#each view.games as g (g.index)}
-            <div>
-              <small>{g.pos}{g.table !== null ? ` · T${view.tables[g.table]?.no}` : ''}</small>
-              <span style="color:var(--home)">{g.home.label}</span>–<span style="color:var(--away)">{g.away.label}</span>
-            </div>
-          {/each}
-        </div>
+      <div class="card-b stack">
         {#if editable}
           {#if !tablesReady || !playersReady}
             <p class="hint">

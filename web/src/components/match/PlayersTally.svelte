@@ -14,9 +14,8 @@
         <tr>
           <td>
             <span class="who">
-              <span class="letter {cls}">{r.label}</span>
+              <span class="rank-tag {cls}">{r.person.ranking || '–'}</span>
               <span class="n">{r.person.full || '–'}</span>
-              {#if r.person.ranking}<span class="rank">{r.person.ranking}</span>{/if}
             </span>
           </td>
           <td><span class="pips">{#each r.pips as p, i (i)}<i class="pip {p}"></i>{/each}</span></td>
@@ -27,8 +26,8 @@
   </table>
 {/snippet}
 
-<section class="card" aria-label="Spelers vanavond">
-  <div class="card-h"><h2>Spelers vanavond</h2></div>
+<section class="card" aria-label="Spelers">
+  <div class="card-h"><h2>Spelers</h2></div>
   <div class="card-b tally-split">
     {@render table('home')}
     {@render table('away')}

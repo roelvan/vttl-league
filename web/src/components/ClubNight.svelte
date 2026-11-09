@@ -5,7 +5,7 @@
   import { nightCard, matchesOn, matchDays } from '../lib/night';
   import { navigate } from '../lib/router.svelte';
   import { urls } from '../lib/nav';
-  import { longDate, todayIso } from '../lib/format';
+  import { longDate, shortDate } from '../lib/format';
   import type { MatchRow } from '../lib/types';
 
   let {
@@ -21,10 +21,10 @@
 
   const days = $derived(matchDays(rows));
   const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, ws.entries[r.matchId]?.view)));
-  const liveCount = $derived(cards.filter((c) => c.state === 'live').length);
   const shown = $derived(
     cards.filter((c) => (filter === 'live' ? c.state === 'live' : filter === 'home' ? c.isHome : filter === 'away' ? !c.isHome : true)),
   );
+  const week = $derived(matchesOn(rows, day).find((r) => r.week)?.week ?? '');
   const prev = $derived(days.filter((d) => d < day).at(-1));
   const next = $derived(days.find((d) => d > day));
 
@@ -35,16 +35,10 @@
   const go = (d: string | undefined) => d && navigate(urls.day(d));
 </script>
 
-<div class="night-head">
-  <h2>Clubavond</h2>
-  <span class="spacer"></span>
-  {#if liveCount}<span class="chip live">{liveCount} live</span>{/if}
-</div>
-
 <div class="daynav">
   <button class="btn ghost" type="button" onclick={() => go(prev)} disabled={!prev} aria-label="Vorige speeldag"><Icon name="left" /></button>
   <label class="day">
-    {day === todayIso() ? 'Vandaag' : longDate(day)}
+    {shortDate(day)}{week ? ` · week ${week}` : ''}
     <input type="date" value={day} onchange={(e) => go(e.currentTarget.value)} aria-label="Kies een datum" />
   </label>
   <button class="btn ghost" type="button" onclick={() => go(next)} disabled={!next} aria-label="Volgende speeldag"><Icon name="right" /></button>

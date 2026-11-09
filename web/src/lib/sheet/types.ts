@@ -95,6 +95,9 @@ export interface Sheet {
   /** The tables in play, in order. Games go out in fixed pairs: game i is on table i % length. */
   tables?: TableSetup[];
 
+  /** Point sequences of the games a scoreboard counted, by game index (for the stats). */
+  boardPlay?: (BoardPlay | null)[];
+
   /** Set after the first full upload; live partial uploads stop then. */
   disablePartialUpload?: boolean;
 
@@ -104,6 +107,18 @@ export interface Sheet {
   vttlLocked?: boolean;
   /** The last upload (or dry run) of this sheet. */
   upload?: UploadInfo;
+}
+
+/** A game counted on a scoreboard, as the server stores it when the game ends
+ *  (src/boards.rs `board_play`). */
+export interface BoardPlay {
+  /** '0' = home won the point, '1' = away. */
+  points: string;
+  /** Board player (1 = home, 2 = away) who served first in set 1. */
+  firstServer: 1 | 2;
+  durationMs: number;
+  /** [home, away] took their timeout; null = the board did not send it. */
+  timeoutsUsed: [boolean, boolean] | null;
 }
 
 export interface TableSetup {

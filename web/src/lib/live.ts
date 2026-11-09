@@ -6,6 +6,7 @@ import type { Sheet, SetScore } from './sheet/types';
 import { gameResult, gameSlots, setWinner, computeScore, isEmptySet, type Won } from './sheet/score';
 import { getSystem, slotLabel, type MatchSystem } from './sheet/systems';
 import { titleCase } from './format';
+import type { BoardTimeout, Moment } from './boardStats';
 
 export type Side = 'home' | 'away';
 export type GameState = 'final' | 'live' | 'next' | 'later' | 'error';
@@ -64,8 +65,14 @@ export interface BoardLive {
   linkedGame: number | null;
   /** Points in the current set, [home, away]. */
   points: [number, number] | null;
+  /** Sets the board finished in the linked game (the match record gets them at the end). */
+  sets: [number, number][];
   /** 'h' | 'a' = who serves. */
   server: 'h' | 'a' | null;
+  /** The board's timeout state while the linked game runs. */
+  timeout: BoardTimeout | null;
+  /** Set point, match point or deuce in the linked game. */
+  moment: Moment;
 }
 
 export interface LiveView {

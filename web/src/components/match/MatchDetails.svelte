@@ -50,7 +50,7 @@
     </dl>
     {#if sheet.comments}<p class="hint">{sheet.comments}</p>{/if}
     {#if onaction}
-      <div class="detail-actions" class:two={!canUpload}>
+      <div class="detail-actions">
         <button class="btn ghost" type="button" onclick={() => onaction('print')}><Icon name="print" size={16} />Wedstrijdblad</button>
         <button class="btn ghost" type="button" onclick={() => onaction('slips')}><Icon name="print" size={16} />Blaadjes</button>
         {#if canUpload}<button class="btn ghost" type="button" onclick={() => onaction('upload')}><Icon name="upload" size={16} />Upload</button>{/if}
