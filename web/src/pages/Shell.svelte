@@ -20,7 +20,7 @@
   import { session } from '../lib/session.svelte';
   import { canEdit, isHomeMember } from '../lib/access';
   import { validateSheet } from '../lib/validation';
-  import { shortDate, todayIso } from '../lib/format';
+  import { shortDate, playDayIso } from '../lib/format';
   import type { PrintJob } from '../lib/sheet/print';
   import { tick } from 'svelte';
 
@@ -46,7 +46,7 @@
     if ((r = match('/wedstrijd/:id', p))) return { club, section: 'match' as const, id: matchIdFromSlug(r.id), day: null };
     if ((r = match('/dag/:day', p)) && /^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { club, section: 'night' as const, id: null, day: r.day };
     if (p === '/instellingen' && !club && session.me) return { club, section: 'other' as const, id: null, day: null };
-    return { club, section: 'night' as const, id: null, day: todayIso() };
+    return { club, section: 'night' as const, id: null, day: playDayIso() };
   });
 
   $effect.pre(() => {
@@ -70,7 +70,7 @@
   const sheet = $derived(m.id ? ws.entries[m.id]?.view : undefined);
   /** The match the nav items point to: the one on screen, else the last one shown. */
   const navMatch = $derived(m.id ?? ws.current);
-  const day = $derived(m.day ?? row?.date ?? sheet?.day ?? (ws.current ? ws.entries[ws.current]?.view.day : null) ?? todayIso());
+  const day = $derived(m.day ?? row?.date ?? sheet?.day ?? (ws.current ? ws.entries[ws.current]?.view.day : null) ?? playDayIso());
 
   $effect(() => {
     const id = m.id;

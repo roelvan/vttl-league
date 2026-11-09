@@ -1,5 +1,5 @@
 #!/bin/sh
-# One-time server setup for competitie.ttczonnebeke.be. Safe to run again.
+# One-time server setup for vttl.ttczonnebeke.be. Safe to run again.
 #
 #   sh deploy/setup.sh            # users, dirs, Rust, env file, systemd unit, nginx (HTTP)
 #   sh deploy/setup.sh --tls      # also gets the Let's Encrypt certificate (DNS must point here)
@@ -8,7 +8,7 @@
 # Shares the box with nginx, mosquitto and Directus: the app only listens on 127.0.0.1:3100.
 set -eu
 HOST="${VL_HOST:-westtoer-directus}"
-DOMAIN=competitie.ttczonnebeke.be
+DOMAIN=vttl.ttczonnebeke.be
 DIR="$(cd "$(dirname "$0")" && pwd)"
 SSH="ssh -o BatchMode=yes -o LogLevel=ERROR"
 

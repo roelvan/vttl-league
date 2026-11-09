@@ -68,11 +68,11 @@ cargo test && pnpm check
   or another board match are ignored. A finished board match writes its set scores.
 - `src/public.rs`: the read-only public API and WebSocket (no login, no account names).
 
-## Deploy (https://competitie.ttczonnebeke.be)
+## Deploy (https://vttl.ttczonnebeke.be)
 
 Server: `westtoer-directus` (Hetzner cax11, ARM64, Ubuntu 24.04), SSH only via Tailscale. It also
 runs nginx, mosquitto and Directus. No Docker: systemd runs the binary on 127.0.0.1:3100, nginx
-(certbot TLS) proxies to it. DNS: A record `competitie` in Cloudflare, DNS only (grey cloud).
+(certbot TLS) proxies to it. DNS: A record `vttl` in Cloudflare, DNS only (grey cloud).
 
 ```sh
 sh deploy/deploy.sh          # build web/ here, build the binary on the server, restart

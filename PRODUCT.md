@@ -61,7 +61,7 @@ without a manual step, and anyone can follow the evening live.
 - Match rules are ported from ScoreSheet (PieterP.be, BSD licence). The app is not an official
   product of PieterP.be or the VTTL and must not present itself as one.
 - Open for any VTTL club. No club is the default and the product identity stays club-neutral;
-  the first deployment is TTC Zonnebeke (competitie.ttczonnebeke.be).
+  the first deployment is TTC Zonnebeke (vttl.ttczonnebeke.be).
 - Not in v1: confirmation by the away captain.
 
 ## Brand Commitments

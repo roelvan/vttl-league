@@ -9,9 +9,16 @@ function parse(iso: string) {
 export const longDate = (iso: string) => (iso ? dayFmt.format(parse(iso)) : 'Zonder datum');
 export const shortDate = (iso: string) => (iso ? shortFmt.format(parse(iso)) : 'Zonder datum');
 
-export function todayIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export const todayIso = () => iso(new Date());
+
+/** The Saturday to show by default: the last one from Saturday until Monday evening, from Tuesday the next one. */
+export function playDayIso(now = new Date()) {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const wd = d.getDay(); // 0 = Sunday … 6 = Saturday
+  d.setDate(d.getDate() + (wd === 0 ? -1 : wd === 1 ? -2 : 6 - wd));
+  return iso(d);
 }
 
 /** "ROEL" -> "Roel" */

@@ -1,5 +1,5 @@
 [Unit]
-Description=vttl-league (competitie.ttczonnebeke.be)
+Description=vttl-league (vttl.ttczonnebeke.be)
 After=network-online.target
 Wants=network-online.target
 

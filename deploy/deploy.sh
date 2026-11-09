@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build and deploy to competitie.ttczonnebeke.be. Run from the repo root or anywhere:
+# Build and deploy to vttl.ttczonnebeke.be. Run from the repo root or anywhere:
 #
 #   sh deploy/deploy.sh
 #
