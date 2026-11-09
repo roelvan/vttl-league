@@ -93,6 +93,8 @@ export interface MatchRow {
   matchType: number | null;
   matchSystem: number | null;
   divisionLevel: number | null;
+  /** Winner per game in VTTL order ("h", "a", "-" = not played); absent without results. */
+  games?: string | null;
 }
 
 export interface MatchList {

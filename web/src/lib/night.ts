@@ -75,7 +75,11 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
       [homeScore, awayScore] = s;
       played = s[0] + s[1];
       state = row.isValidated || row.isLocked || (total && played >= total) ? 'final' : 'live';
-      segments = Array.from({ length: Math.max(total, played) }, (_, i) => (i < s[0] ? 'h' : i < played ? 'a' : ''));
+      // The real game order when VTTL has the individual results, else home wins first.
+      const order = row.games ?? '';
+      segments = Array.from({ length: Math.max(total, played, order.length) }, (_, i) =>
+        order ? (order[i] === 'h' ? 'h' : order[i] === 'a' ? 'a' : '') : i < s[0] ? 'h' : i < played ? 'a' : '',
+      );
     }
   }
   if (homeScore !== null && state === 'soon' && (homeScore || awayScore)) state = 'live';

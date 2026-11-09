@@ -251,6 +251,8 @@ struct MatchRow<'a> {
     match_system: Option<i64>,
     /// TabT division level (1 national, 6 super, 15 regional VTTL, 7-10 provinces...).
     division_level: Option<i64>,
+    /// Winner per game in VTTL order: "h", "a", or "-" when not played. None without results.
+    games: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -299,6 +301,26 @@ fn head(m: &TeamMatch) -> MatchHead<'_> {
     }
 }
 
+/// "haah-…": the winner of each individual game, ordered by position.
+fn game_winners(d: &tabt::MatchDetails) -> Option<String> {
+    if d.results.is_empty() {
+        return None;
+    }
+    let mut r: Vec<&tabt::IndividualResult> = d.results.iter().collect();
+    r.sort_by_key(|g| g.position);
+    Some(
+        r.iter()
+            .map(|g| match (g.is_home_forfeited, g.is_away_forfeited) {
+                (false, true) => 'h',
+                (true, false) => 'a',
+                _ if g.home_sets > g.away_sets => 'h',
+                _ if g.away_sets > g.home_sets => 'a',
+                _ => '-',
+            })
+            .collect(),
+    )
+}
+
 /// "Vl-B234" and "VLB234" are the same club.
 pub fn same_club(a: &str, b: &str) -> bool {
     let n = |s: &str| s.chars().filter(|c| *c != '-').collect::<String>().to_uppercase();
@@ -341,6 +363,7 @@ pub async fn match_list(app: &App, creds: Option<&Creds>, season: i64, club: &st
                 match_type: team.map(|t| t.match_type),
                 match_system: m.details.as_ref().map(|d| d.match_system).filter(|s| *s != 0),
                 division_level: levels.get(&m.division_id).copied(),
+                games: m.details.as_ref().and_then(game_winners),
             }
         })
         .collect();

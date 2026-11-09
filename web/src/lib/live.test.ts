@@ -142,6 +142,13 @@ describe('nightCard', () => {
     expect(c.outcome).toBe('lost');
   });
 
+  it('away match: the bar follows the VTTL game order', () => {
+    const c = nightCard(row({ score: '13-3', games: 'ahhhaahhhhhhhhhh' }), undefined);
+    expect(c.segments.join('')).toBe('ahhhaahhhhhhhhhh');
+    const partial = nightCard(row({ score: '1-1', games: 'ha--' }), undefined);
+    expect(partial.segments.slice(0, 4)).toEqual(['h', 'a', '', '']);
+  });
+
   it('home match: the stored record wins over VTTL', () => {
     const s = men();
     s.started = true;
