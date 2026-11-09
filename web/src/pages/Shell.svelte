@@ -153,7 +153,7 @@
         <p>Kies links een wedstrijd van de clubavond om ze live te volgen.</p>
       </div>
     {:else if m.section === 'match' && m.id}
-      {#key m.id}<MatchPage matchId={m.id} {row} />{/key}
+      {#key m.id}<MatchPage matchId={m.id} {row} {onaction} />{/key}
     {:else if m.section === 'lineup' && m.id}
       {#key m.id}<LineUpPage matchId={m.id} {row} />{/key}
     {:else}

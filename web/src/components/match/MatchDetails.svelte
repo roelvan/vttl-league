@@ -3,8 +3,14 @@
   import type { Sheet } from '../../lib/sheet/types';
   import type { LiveView } from '../../lib/live';
   import { vttlStatus, STATUS_TEXT } from '../../lib/sheet/vttl';
+  import Icon from '../Icon.svelte';
+  import type { MenuAction } from '../../lib/nav';
 
-  let { sheet, view }: { sheet: Sheet; view: LiveView } = $props();
+  let {
+    sheet,
+    view,
+    onaction,
+  }: { sheet: Sheet; view: LiveView; /** Set for editors: shows the print and upload buttons. */ onaction?: (a: MenuAction) => void } = $props();
 
   const status = $derived(sheet.isOfficial ? vttlStatus(sheet, view.sys) : null);
   const upload = $derived(sheet.upload);
@@ -36,5 +42,12 @@
       {/if}
     </dl>
     {#if sheet.comments}<p class="hint">{sheet.comments}</p>{/if}
+    {#if onaction}
+      <div class="detail-actions">
+        <button class="btn ghost" type="button" onclick={() => onaction('print')}><Icon name="print" size={16} />Wedstrijdblad</button>
+        <button class="btn ghost" type="button" onclick={() => onaction('slips')}><Icon name="print" size={16} />Blaadjes</button>
+        <button class="btn ghost" type="button" onclick={() => onaction('upload')}><Icon name="upload" size={16} />Upload</button>
+      </div>
+    {/if}
   </div>
 </section>

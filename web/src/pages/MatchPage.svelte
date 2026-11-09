@@ -12,10 +12,10 @@
   import { canEdit } from '../lib/access';
   import { boardFor, livePointsFor, sendToBoard } from '../lib/boards.svelte';
   import { link } from '../lib/router.svelte';
-  import { urls } from '../lib/nav';
+  import { urls, type MenuAction } from '../lib/nav';
   import type { MatchRow } from '../lib/types';
 
-  let { matchId, row }: { matchId: string; row: MatchRow | null } = $props();
+  let { matchId, row, onaction }: { matchId: string; row: MatchRow | null; onaction: (a: MenuAction) => void } = $props();
 
   const sheet = $derived(ws.entries[matchId]?.view);
   const view = $derived.by(() => {
@@ -81,7 +81,7 @@
 
     <div class="match-aside">
       <PlayersTally {sheet} {view} />
-      <MatchDetails {sheet} {view} />
+      <MatchDetails {sheet} {view} onaction={editable ? onaction : undefined} />
       {#if editable}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
           <span class="ico"><Icon name="lineup" size={22} /></span>

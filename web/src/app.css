@@ -279,6 +279,8 @@ button.chip { cursor: pointer; }
 .info { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 15px; margin: 0; }
 .info dt { color: var(--muted); font-weight: 500; }
 .info dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.detail-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.detail-actions .btn { padding: 8px 6px; font-size: 14px; gap: 6px; }
 
 .prep { display: flex; gap: 14px; align-items: center; padding: 16px; text-decoration: none; color: inherit; }
 .prep .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--surface-2); display: grid; place-items: center; flex: none; }
