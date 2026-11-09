@@ -42,7 +42,9 @@ export const boards = $state({
 });
 
 export async function loadDevices() {
-  boards.devices = await api.devices();
+  const [devices, states] = await Promise.all([api.devices(), api.boardStates().catch(() => [])]);
+  boards.devices = devices;
+  for (const s of states) boards.live[s.device] = s;
   boards.loaded = true;
 }
 
@@ -59,9 +61,9 @@ export async function removeDevice(id: string) {
 export const deviceAlias = (id: string) => boards.devices.find((d) => d.id === id)?.alias || id;
 
 /** Called by the WebSocket for every board message. */
-export function onBoardMessage(msg: { device: string; state: BoardState | null; lastSeen?: number }) {
+export function onBoardMessage(msg: { device: string; state?: BoardState | null; lastSeen?: number }) {
   if (msg.state) boards.live[msg.device] = msg.state;
-  else delete boards.live[msg.device];
+  else if (msg.state === null) delete boards.live[msg.device];
   const d = boards.devices.find((x) => x.id === msg.device);
   if (d && msg.lastSeen) d.lastSeen = msg.lastSeen;
 }
@@ -93,7 +95,7 @@ export function livePointsFor(matchId: string, view: LiveView): Record<number, [
 const upper = (s: string) => s.toUpperCase();
 
 /** Sends the players of a game to the board of its table and links the board to that game. */
-export async function sendToBoard(matchId: string, sheet: Sheet, table: TableView, game: GameView) {
+export async function sendToBoard(matchId: string, _sheet: Sheet, table: TableView, game: GameView) {
   if (!table.device) return;
   const side = (g: GameView['home']) => ({
     first: upper(g.people.length === 1 ? g.people[0].full.slice(0, g.people[0].full.length - g.people[0].last.length).trim() : ''),
@@ -104,7 +106,6 @@ export async function sendToBoard(matchId: string, sheet: Sheet, table: TableVie
       device: table.device,
       sheet: matchId,
       game: game.index,
-      bestOf: sheetBestOf(sheet),
       player1: side(game.home),
       player2: side(game.away),
     });
@@ -113,8 +114,4 @@ export async function sendToBoard(matchId: string, sheet: Sheet, table: TableVie
   } catch (e) {
     ws.message = e instanceof ApiError ? `Scorebord: ${e.message}` : 'Het scorebord is niet bereikbaar.';
   }
-}
-
-function sheetBestOf(sheet: Sheet) {
-  return sheet.results[0]?.length ?? 5;
 }

@@ -2,6 +2,7 @@
 
 use crate::app::App;
 use crate::auth::{self, User};
+use crate::boards;
 use crate::crypto;
 use crate::db::{self, Account};
 use crate::sheets;
@@ -88,6 +89,9 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/sheet/ops", post(sheets::ops))
         .route("/api/ws", get(sheets::ws))
         .route("/api/upload", post(upload))
+        .route("/api/devices", get(boards::list_devices).put(boards::save_device).delete(boards::delete_device))
+        .route("/api/boards", get(boards::states))
+        .route("/api/boards/link", post(boards::link))
         .with_state(app)
 }
 
@@ -427,6 +431,7 @@ async fn upload(State(app): State<Arc<App>>, u: User, Json(b): Json<UploadBody>)
     app.db.log_upload(&club, &b.id, &u.account.account, b.partial, dry_run, ok, &b.data, &errors)?;
     tracing::info!(club = %club, id = %b.id, partial = b.partial, dry_run, ok, "upload");
     if ok && !dry_run {
+        app.db.mark_can_upload(&u.account.account)?;
         // The next read must show what we just sent.
         app.tabt.invalidate(&club);
         app.tabt.invalidate(&club.replace('-', ""));

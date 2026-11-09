@@ -1,5 +1,6 @@
 //! Shared state.
 
+use crate::boards::Boards;
 use crate::crypto::Crypto;
 use crate::db::Db;
 use crate::tabt::Tabt;
@@ -15,6 +16,8 @@ pub struct App {
     pub upload_enabled: bool,
     /// Changes for the browsers: (club, JSON message). Each WebSocket keeps its own club.
     pub events: broadcast::Sender<(String, String)>,
+    /// Scoreboards: MQTT connection and last state per board.
+    pub boards: Boards,
 }
 
 impl App {

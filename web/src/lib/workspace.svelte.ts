@@ -370,6 +370,8 @@ export function connect() {
           recompute(e);
           persist();
         } else if (msg.rev > e.rev) refresh(msg.id).catch(() => {});
+        // A scoreboard result: the captain who linked the board uploads it (only one device does).
+        if (typeof msg.clientId === 'string' && msg.clientId.startsWith('board:') && msg.by && msg.by === session.me?.account.account) uploadSoon(msg.id);
       }
     } else if (msg.type === 'resync') {
       refreshAll();
@@ -463,6 +465,14 @@ const fullWaiting = new Set<string>();
 function canUpload(s: Sheet) {
   const sys = getSystem(s.matchSystemId);
   return s.isOfficial && sys.competitive && !s.vttlLocked;
+}
+
+/** Upload after a change that did not come from this device's own edit. */
+function uploadSoon(id: string) {
+  const s = ws.entries[id]?.view;
+  if (!s) return;
+  if (teamScore(s).complete) scheduleFull(id);
+  else scheduleLive(id);
 }
 
 function scheduleLive(id: string) {

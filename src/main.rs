@@ -1,9 +1,9 @@
 mod api;
 mod app;
 mod auth;
+mod boards;
 mod crypto;
 mod db;
-#[allow(dead_code)]
 mod scoreboard;
 mod sheets;
 mod tabt;
@@ -34,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
     let local = bind.starts_with("127.0.0.1") || bind.starts_with("localhost");
     let web_dir = PathBuf::from(var("WEB_DIR").unwrap_or_else(|_| "web/dist".into()));
 
+    let (boards, mqtt) = boards::Boards::connect();
     let app = Arc::new(App {
         tabt: tabt::Tabt::new(var("VTTL_ENDPOINT").unwrap_or_else(|_| "https://api.vttl.be/0.7/index.php?s=vttl".into())),
         db: db::Db::open(&database)?,
@@ -41,7 +42,11 @@ async fn main() -> anyhow::Result<()> {
         cookie_secure: var("COOKIE_SECURE").map(|v| v != "false").unwrap_or(!local),
         events: tokio::sync::broadcast::channel(1024).0,
         upload_enabled: var("UPLOAD_ENABLED").is_ok_and(|v| v == "true"),
+        boards,
     });
+    if let Some(eventloop) = mqtt {
+        tokio::spawn(boards::run(app.clone(), eventloop));
+    }
     if app.upload_enabled {
         tracing::warn!("UPLOAD_ENABLED=true: uploads change the LIVE VTTL database");
     }

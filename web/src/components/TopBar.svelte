@@ -63,7 +63,7 @@
       </button>
       {#if open}
         <div class="menu" role="menu">
-          {#if session.me?.account.memberName}<div class="who">{session.me.account.memberName} · {session.me.account.club}</div><hr />{/if}
+          {#if session.me?.account.memberName}<div class="who">{session.me.account.memberName} · {session.me.account.club}{session.me.account.canUpload ? ' · kan uploaden' : ''}</div><hr />{/if}
           {#if matchActions}
             <button role="menuitem" type="button" onclick={() => pick('print')}><Icon name="print" />Wedstrijdblad afdrukken</button>
             <button role="menuitem" type="button" onclick={() => pick('slips')}><Icon name="print" />Scheidsrechterblaadjes</button>

@@ -39,6 +39,8 @@ const MIGRATIONS: &[&str] = &[
         errors     TEXT NOT NULL
      );
      CREATE INDEX upload_sheet ON upload(club, id, at);",
+    // 4: scoreboards, board links, "can upload" mark
+    crate::boards::MIGRATION,
 ];
 
 /// Sessions end after this many seconds without use.
@@ -56,6 +58,8 @@ pub struct Account {
     pub member: Option<i64>,
     pub member_name: Option<String>,
     pub club: Option<String>,
+    /// Did a real upload to VTTL with this account succeed once? (VTTL does not tell the rights.)
+    pub can_upload: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -109,14 +113,14 @@ impl Db {
         let c = self.conn.lock().unwrap();
         let row = c
             .query_row(
-                "SELECT s.secret, s.last_seen, a.account, a.member, a.member_name, a.club
+                "SELECT s.secret, s.last_seen, a.account, a.member, a.member_name, a.club, a.can_upload
                  FROM session s JOIN account a ON a.account = s.account WHERE s.token_hash = ?1",
                 params![token_hash],
                 |r| {
                     Ok(Session {
                         secret: r.get(0)?,
                         last_seen: r.get(1)?,
-                        account: Account { account: r.get(2)?, member: r.get(3)?, member_name: r.get(4)?, club: r.get(5)? },
+                        account: Account { account: r.get(2)?, member: r.get(3)?, member_name: r.get(4)?, club: r.get(5)?, can_upload: r.get(6)? },
                     })
                 },
             )
@@ -152,9 +156,9 @@ impl Db {
 
 fn account_row(c: &Connection, account: &str) -> Result<Option<Account>> {
     Ok(c.query_row(
-        "SELECT account, member, member_name, club FROM account WHERE account = ?1",
+        "SELECT account, member, member_name, club, can_upload FROM account WHERE account = ?1",
         params![account],
-        |r| Ok(Account { account: r.get(0)?, member: r.get(1)?, member_name: r.get(2)?, club: r.get(3)? }),
+        |r| Ok(Account { account: r.get(0)?, member: r.get(1)?, member_name: r.get(2)?, club: r.get(3)?, can_upload: r.get(4)? }),
     )
     .optional()?)
 }

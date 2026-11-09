@@ -5,6 +5,8 @@ export interface Account {
   member: number | null;
   memberName: string | null;
   club: string | null;
+  /** A real upload with this account succeeded once. */
+  canUpload: boolean;
 }
 
 export interface Venue {

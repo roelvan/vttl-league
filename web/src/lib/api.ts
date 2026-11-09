@@ -13,7 +13,6 @@ export interface BoardLink {
   device: string;
   sheet: string;
   game: number;
-  bestOf: number;
   player1: { first: string; last: string };
   player2: { first: string; last: string };
 }
@@ -117,6 +116,7 @@ export const api = {
   devices: () => request<Device[]>('GET', '/api/devices'),
   saveDevice: (id: string, alias: string) => request<void>('PUT', '/api/devices', { id, alias }),
   deleteDevice: (id: string) => request<void>('DELETE', `/api/devices?id=${encodeURIComponent(id)}`),
+  boardStates: () => request<BoardState[]>('GET', '/api/boards'),
   linkBoard: (b: BoardLink) => request<BoardState>('POST', '/api/boards/link', b),
   sheetOps: (id: string, clientId: string, seq: number, ops: Op[]) =>
     request<{ rev: number; seq: number }>('POST', '/api/sheet/ops', { id, clientId, seq, ops }),
