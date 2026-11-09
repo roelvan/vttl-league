@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { ws } from '../lib/workspace.svelte';
 
   let shown = $state('');
@@ -15,7 +16,7 @@
 {#if shown}
   <div class="toast" role="status">
     <span>{shown}</span>
-    <button class="x" type="button" aria-label="Sluiten" onclick={() => (shown = '')}>×</button>
+    <button class="x" type="button" aria-label="Sluiten" onclick={() => (shown = '')}><Icon name="close" size={18} /></button>
   </div>
 {/if}
 

@@ -94,8 +94,8 @@
     <div class="board-meta">
       <span>{view.started ? 'Avond bezig' : 'Voor wedstrijd 1'}</span><span class="dot"></span><span>{sheet.home.name} – {sheet.away.name}</span>
     </div>
-    <div class="card-h"><h2 style="font-size:24px">Opstelling en tafels</h2></div>
-    <p class="hint" style="padding:0 16px 16px;margin:0">
+    <div class="card-h"><h2>Opstelling en tafels</h2></div>
+    <p class="hint">
       Kies de tafels en de spelers van beide ploegen. De spelers staan in volgorde van klassement, zoals op het VTTL-blad. De {view.games.length} wedstrijden volgen daaruit.
     </p>
   </section>
@@ -161,7 +161,7 @@
               </label>
             {/each}
           {/each}
-          <p class="hint wide" style="margin:0">De dubbel mag je ook later kiezen, voor de dubbelwedstrijd begint.</p>
+          <p class="hint wide">De dubbel mag je ook later kiezen, voor de dubbelwedstrijd begint.</p>
         </div>
       </section>
     {/if}
@@ -217,7 +217,7 @@
         </div>
         {#if editable}
           {#if !tablesReady || !playersReady}
-            <p class="hint" style="margin:0">
+            <p class="hint">
               {!tablesReady ? 'Vul minstens één tafel in. ' : ''}{!playersReady ? 'Nog niet alle spelers zijn gekozen. Je kunt toch al starten.' : ''}
             </p>
           {/if}

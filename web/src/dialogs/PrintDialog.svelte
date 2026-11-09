@@ -43,7 +43,7 @@
       {#if what === 'sheet'}<PrintSheet {sheet} />{:else}<RefereeSlips {sheet} layout={settings.slipLayout} />{/if}
     {/if}
   </div>
-  <p class="hint" style="margin:0">Kies "Opslaan als PDF" in het afdrukvenster voor een PDF.</p>
+  <p class="hint">Kies "Opslaan als PDF" in het afdrukvenster voor een PDF.</p>
   {#snippet footer()}
     <button class="btn ghost" type="button" onclick={onclose}>Annuleren</button>
     <button class="btn" type="button" onclick={go}>{confirmErrors ? 'Toch afdrukken' : 'Afdrukken'}</button>

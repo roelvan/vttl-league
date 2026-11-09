@@ -8,7 +8,7 @@
 {#snippet table(side: Side)}
   {@const cls = side === 'home' ? 'h' : 'a'}
   <table class="tally">
-    <thead><tr><th>{sheet[side].name}</th><th></th><th style="text-align:right">W–V</th></tr></thead>
+    <thead><tr><th>{sheet[side].name}</th><th><span class="sr-only">Uitslagen</span></th><th>W–V</th></tr></thead>
     <tbody>
       {#each tally(sheet, view, side) as r (r.label)}
         <tr>

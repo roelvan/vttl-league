@@ -59,22 +59,22 @@
 <div class="narrow">
   <section class="card">
     <div class="card-h"><h2>Scoreborden van {session.me?.club?.name ?? 'de club'}</h2></div>
-    <div class="card-b" style="display:grid;gap:12px">
-      <p class="hint" style="margin:0">
+    <div class="card-b stack">
+      <p class="hint">
         Voeg elk scorebord één keer toe met zijn ID (zoals op het scorebord) en een naam. In de opstelling kies je daarna per tafel een scorebord.
       </p>
-      {#if error}<p class="error" style="margin:0">{error}</p>{/if}
+      {#if error}<p class="error">{error}</p>{/if}
       <ul class="list">
         {#each boards.devices as d (d.id)}
           {@const online = !!d.lastSeen && Date.now() - d.lastSeen < 120000}
-          <li class="row-btn" style="cursor:default;flex-wrap:wrap">
+          <li class="row-btn">
             <Icon name="board" />
             {#if d.id in editing}
-              <input style="flex:1;min-width:140px" bind:value={editing[d.id]} placeholder="Naam" aria-label="Naam van {d.id}" />
+              <input class="grow" bind:value={editing[d.id]} placeholder="Naam" aria-label="Naam van {d.id}" />
               <button class="btn" type="button" onclick={() => rename(d.id)}>Bewaren</button>
               <button class="btn ghost" type="button" onclick={() => delete editing[d.id]}>Annuleren</button>
             {:else}
-              <span style="flex:1;min-width:0">
+              <span class="grow">
                 <b>{d.alias || d.id}</b><br />
                 <span class="muted mono">{d.id}</span> · <span class:ok={online} class:muted={!online}>{ago(d.lastSeen)}</span>
               </span>

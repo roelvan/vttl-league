@@ -48,10 +48,10 @@
     <dl class="info">
       <dt>Wedstrijd</dt><dd>{s.home.name} – {s.away.name}</dd>
       <dt>Uitslag</dt><dd>{sc.homeWins}–{sc.awayWins}{complete ? '' : ' (tussenstand)'}</dd>
-      <dt>VTTL</dt><dd style="display:flex;gap:6px;justify-content:flex-end;align-items:center"><VttlIcon {status} /><span class="muted">{STATUS_TEXT[status]}</span></dd>
+      <dt>VTTL</dt><dd class="with-icon"><VttlIcon {status} /><span class="muted">{STATUS_TEXT[status]}</span></dd>
     </dl>
     {#if !canUpload}
-      <p class="muted" style="margin:0">Deze wedstrijd kan niet naar VTTL (geen officiële competitie, of al gevalideerd).</p>
+      <p class="muted">Deze wedstrijd kan niet naar VTTL (geen officiële competitie, of al gevalideerd).</p>
     {/if}
     {#if errors.length}
       <details class="banner warn" open={confirmErrors}>
@@ -60,11 +60,11 @@
       </details>
     {/if}
     {#if result}
-      {#if 'error' in result}<p class="error" style="margin:0">{result.error}</p>
-      {:else if !result.ok}<p class="error" style="margin:0">{result.errors.join('; ')}</p>
+      {#if 'error' in result}<p class="error">{result.error}</p>
+      {:else if !result.ok}<p class="error">{result.errors.join('; ')}</p>
       {:else}
-        <p class="ok" style="margin:0">{result.dryRun ? 'Proefupload OK' : 'Geüpload'}</p>
-        <details><summary class="muted">Uploadlijn</summary><pre class="mono" style="white-space:pre-wrap;word-break:break-all">{result.data}</pre></details>
+        <p class="ok">{result.dryRun ? 'Proefupload OK' : 'Geüpload'}</p>
+        <details><summary class="muted">Uploadlijn</summary><pre class="mono">{result.data}</pre></details>
       {/if}
     {/if}
   {/if}

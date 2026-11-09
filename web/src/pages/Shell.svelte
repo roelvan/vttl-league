@@ -93,6 +93,17 @@
 
   const homeMatch = $derived(!publicClub() && isHomeMember(sheet) && (row?.isHome ?? true));
   const ourMatch = $derived(homeMatch && canEdit(sheet));
+  /** The page heading for screen readers; the visible headings start at h2. */
+  const pageTitle = $derived(
+    m.section === 'other'
+      ? 'Instellingen'
+      : m.section === 'night'
+        ? 'Clubavond'
+        : `${m.section === 'lineup' ? 'Opstelling' : 'Wedstrijd'}${sheet ? `: ${sheet.home.name} – ${sheet.away.name}` : ''}`,
+  );
+  $effect(() => {
+    document.title = `${pageTitle} · Interclub Live`;
+  });
 
   async function onaction(a: MenuAction) {
     if (a === 'about') dialog = { kind: 'about' };
@@ -148,6 +159,7 @@
   {/if}
 
   <main class="view">
+    <h1 class="sr-only">{pageTitle} · Interclub Live</h1>
     {#if m.section === 'night'}
       <div class="view-night-only view"><ClubNight {day} {rows} loaded={!!list} currentId={ws.current} /></div>
       <div class="card empty hide-mobile">
@@ -174,10 +186,10 @@
 {:else if dialog?.kind === 'validate'}
   <Dialog title="Valideren" onclose={() => (dialog = null)}>
     {#if dialog.errors.length}
-      <p style="margin:0">De app vond deze validatiefouten:</p>
+      <p>De app vond deze validatiefouten:</p>
       <ul class="errors">{#each dialog.errors as e (e)}<li>{e}</li>{/each}</ul>
     {:else}
-      <p style="margin:0" class="ok">Geen validatiefouten gevonden.</p>
+      <p class="ok">Geen validatiefouten gevonden.</p>
     {/if}
     {#snippet footer()}<button class="btn big" type="button" onclick={() => (dialog = null)}>OK</button>{/snippet}
   </Dialog>

@@ -51,30 +51,30 @@
   <div class="narrow">
     <section class="card">
       <div class="card-h"><h2>Wie ben jij?</h2></div>
-      <div class="card-b" style="display:grid;gap:12px">
-        <p class="muted" style="margin:0">
+      <div class="card-b stack">
+        <p class="muted">
           VTTL geeft de club van een account niet door. Zoek jezelf één keer op naam. De app toont daarna de wedstrijden van jouw club.
         </p>
         {#if session.me?.account.member}
-          <p style="margin:0">Nu gekozen: <strong>{session.me.account.memberName}</strong> ({session.me.account.club})</p>
+          <p>Nu gekozen: <strong>{session.me.account.memberName}</strong> ({session.me.account.club})</p>
           <button class="btn ghost" type="button" onclick={() => navigate('/', true)}>← Terug naar de clubavond</button>
         {/if}
         <!-- svelte-ignore a11y_autofocus -->
         <input type="search" placeholder="Familienaam of voornaam" bind:value={query} oninput={onInput} autofocus aria-label="Zoek op naam" />
-        {#if error}<p class="error" style="margin:0">{error}</p>{/if}
-        {#if busy && !results.length}<p class="muted" style="margin:0">Zoeken…</p>{/if}
+        {#if error}<p class="error">{error}</p>{/if}
+        {#if busy && !results.length}<p class="muted">Zoeken…</p>{/if}
         <ul class="list">
           {#each results as m (m.uniqueIndex)}
             <li>
               <button class="row-btn" type="button" onclick={() => pick(m)} disabled={busy}>
-                <strong style="flex:1">{playerName(m)}</strong>
+                <strong class="grow">{playerName(m)}</strong>
                 <span class="muted">{m.club}</span>
                 <span class="rank">{m.ranking}</span>
               </button>
             </li>
           {/each}
         </ul>
-        {#if !busy && query.trim().length >= 3 && !results.length && !error}<p class="muted" style="margin:0">Niemand gevonden.</p>{/if}
+        {#if !busy && query.trim().length >= 3 && !results.length && !error}<p class="muted">Niemand gevonden.</p>{/if}
       </div>
     </section>
   </div>

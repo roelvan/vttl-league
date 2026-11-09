@@ -36,7 +36,7 @@
       <dt>Scheidsrechter</dt><dd>{person(sheet.chiefReferee)}</dd>
       {#if status}
         <dt>VTTL</dt>
-        <dd style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+        <dd class="with-icon">
           <VttlIcon {status} />
           <span class="muted">{STATUS_TEXT[status]}</span>
         </dd>

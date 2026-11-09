@@ -7,11 +7,11 @@
 </script>
 
 <nav class="bottomnav" aria-label="Hoofdmenu">
-  <a href={matchId ? urls.match(matchId) : '/'} onclick={link} class:disabled={!matchId} aria-current={section === 'match' ? 'page' : undefined}>
+  <a href={matchId ? urls.match(matchId) : undefined} onclick={link} class:disabled={!matchId} aria-disabled={!matchId || undefined} aria-current={section === 'match' ? 'page' : undefined}>
     <Icon name="match" size={22} />Wedstrijd
   </a>
   <a href={urls.day(day)} onclick={link} aria-current={section === 'night' ? 'page' : undefined}><Icon name="night" size={22} />Clubavond</a>
-  <a href={matchId ? urls.lineup(matchId) : '/'} onclick={link} class:disabled={!matchId} aria-current={section === 'lineup' ? 'page' : undefined}>
+  <a href={matchId ? urls.lineup(matchId) : undefined} onclick={link} class:disabled={!matchId} aria-disabled={!matchId || undefined} aria-current={section === 'lineup' ? 'page' : undefined}>
     <Icon name="lineup" size={22} />Opstelling
   </a>
 </nav>

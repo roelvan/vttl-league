@@ -52,8 +52,8 @@
       <span class="label">Interclub Live</span>
     </a>
     <nav class="topnav" aria-label="Hoofdmenu">
-      <a href={matchId ? urls.match(matchId) : urls.home()} onclick={link} class:disabled={!matchId} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
-      <a href={matchId ? urls.lineup(matchId) : urls.home()} onclick={link} class:disabled={!matchId} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
+      <a href={matchId ? urls.match(matchId) : undefined} onclick={link} class:disabled={!matchId} aria-disabled={!matchId || undefined} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
+      <a href={matchId ? urls.lineup(matchId) : undefined} onclick={link} class:disabled={!matchId} aria-disabled={!matchId || undefined} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
     </nav>
     <span class="spacer"></span>
     {#if datechip}<span class="datechip">{datechip}</span>{/if}
@@ -62,33 +62,33 @@
       <Icon name={settings.theme === 'dark' ? 'sun' : 'moon'} />
     </button>
     <div class="menu-wrap" bind:this={wrap}>
-      <button class="btn ghost icon-btn" type="button" aria-label="Menu" aria-haspopup="menu" aria-expanded={open} onclick={() => (open = !open)}>
+      <button class="btn ghost icon-btn" type="button" aria-label="Menu" aria-controls="top-menu" aria-expanded={open} onclick={() => (open = !open)}>
         <Icon name="more" />
       </button>
       {#if open}
-        <div class="menu" role="menu">
+        <div class="menu" id="top-menu">
           {#if session.me?.account.memberName}<div class="who">{session.me.account.memberName} · {session.me.account.club}{session.me.account.canUpload ? ' · kan uploaden' : ''}</div><hr />{/if}
           {#if printActions}
-            <button role="menuitem" type="button" onclick={() => pick('print')}><Icon name="print" />Wedstrijdblad afdrukken</button>
-            <button role="menuitem" type="button" onclick={() => pick('slips')}><Icon name="print" />Scheidsrechterblaadjes</button>
+            <button type="button" onclick={() => pick('print')}><Icon name="print" />Wedstrijdblad afdrukken</button>
+            <button type="button" onclick={() => pick('slips')}><Icon name="print" />Scheidsrechterblaadjes</button>
             {#if matchActions}
-              <button role="menuitem" type="button" onclick={() => pick('validate')}><Icon name="check" />Valideren</button>
-              <button role="menuitem" type="button" onclick={() => pick('upload')}><Icon name="upload" />Upload naar VTTL</button>
+              <button type="button" onclick={() => pick('validate')}><Icon name="check" />Valideren</button>
+              <button type="button" onclick={() => pick('upload')}><Icon name="upload" />Upload naar VTTL</button>
             {/if}
             <hr />
           {/if}
-          {#if matchId}<button role="menuitem" type="button" onclick={() => pick('share')}><Icon name="share" />Publieke link kopiëren</button>{/if}
+          {#if matchId}<button type="button" onclick={() => pick('share')}><Icon name="share" />Publieke link kopiëren</button>{/if}
           {#if session.me && !publicClub()}
-            <button role="menuitem" type="button" onclick={() => ((open = false), navigate(urls.settings()))}><Icon name="settings" />Scoreborden</button>
-            <button role="menuitem" type="button" onclick={() => ((open = false), navigate('/ik'))}><Icon name="user" />Wie ben ik?</button>
+            <button type="button" onclick={() => ((open = false), navigate(urls.settings()))}><Icon name="settings" />Scoreborden</button>
+            <button type="button" onclick={() => ((open = false), navigate('/ik'))}><Icon name="user" />Wie ben ik?</button>
           {/if}
-          <button role="menuitem" type="button" onclick={() => pick('about')}><Icon name="info" />Over deze app</button>
+          <button type="button" onclick={() => pick('about')}><Icon name="info" />Over deze app</button>
           {#if session.me}
             <hr />
-            <button role="menuitem" type="button" onclick={() => ((open = false), logout())}><Icon name="logout" />Afmelden</button>
+            <button type="button" onclick={() => ((open = false), logout())}><Icon name="logout" />Afmelden</button>
           {:else}
             <hr />
-            <button role="menuitem" type="button" onclick={() => ((open = false), navigate('/login'))}><Icon name="user" />Aanmelden</button>
+            <button type="button" onclick={() => ((open = false), navigate('/login'))}><Icon name="user" />Aanmelden</button>
           {/if}
         </div>
       {/if}

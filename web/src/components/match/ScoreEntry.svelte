@@ -130,7 +130,7 @@
 <Dialog title="Wedstrijd {game.pos}" chip={tableNo ? `Tafel ${tableNo}${boardBusy ? ' · scorebord' : ''}` : game.state === 'final' ? 'Gespeeld' : 'Nog niet begonnen'} onclose={save}>
   <div class="vs">
     <div class="p"><span class="letter h">{game.home.label.length > 2 ? 'D' : game.home.label}</span><span class="n">{names('home')}</span></div>
-    <div class="sum"><span style="color:var(--home)">{homeSets}</span><span style="color:var(--faint)">–</span><span style="color:var(--away)">{awaySets}</span></div>
+    <div class="sum" aria-label="{homeSets} tegen {awaySets} in sets"><span class="h">{homeSets}</span><span class="sep">–</span><span class="a">{awaySets}</span></div>
     <div class="p r"><span class="letter a">{game.away.label.length > 2 ? 'D' : game.away.label}</span><span class="n">{names('away')}</span></div>
   </div>
 
@@ -160,6 +160,8 @@
           class:won={w === 'home' || w === 'homeFF'}
           class:h={true}
           class:bad={w === 'error'}
+          aria-invalid={w === 'error' || undefined}
+          aria-describedby={result.won === 'error' ? 'score-error' : undefined}
           oninput={(e) => oninput(i, 'l', e)}
           onfocus={() => (focus = i)}
         />
@@ -175,6 +177,8 @@
           class:won={w === 'away' || w === 'awayFF'}
           class:a={true}
           class:bad={w === 'error'}
+          aria-invalid={w === 'error' || undefined}
+          aria-describedby={result.won === 'error' ? 'score-error' : undefined}
           oninput={(e) => oninput(i, 'r', e)}
           onfocus={() => (focus = i)}
         />
@@ -183,7 +187,7 @@
   </div>
 
   {#if !readonly}
-    <div class="quick" aria-label="Snel invullen">
+    <div class="quick" role="group" aria-label="Snel invullen">
       <button type="button" onclick={() => quick('home11')}>{sys.pointCount} –</button>
       <button type="button" onclick={() => quick('away11')}>– {sys.pointCount}</button>
       <button type="button" onclick={() => quick('clear')}>Set wissen</button>
@@ -192,9 +196,11 @@
     </div>
   {/if}
 
-  {#if result.won === 'error'}
-    <p class="error" style="margin:0">Deze score klopt niet. Een set gaat tot {sys.pointCount}, met 2 punten verschil.</p>
-  {/if}
+  <div role="alert">
+    {#if result.won === 'error'}
+      <p class="error" id="score-error">Deze score klopt niet. Een set gaat tot {sys.pointCount}, met 2 punten verschil.</p>
+    {/if}
+  </div>
   <div class="code"><span>VTTL-notatie</span><code>{code || '–'}</code></div>
 
   {#snippet footer()}

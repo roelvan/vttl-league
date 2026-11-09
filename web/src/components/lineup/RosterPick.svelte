@@ -96,12 +96,12 @@
     <span class="spacer"></span>
     <span class="eyebrow">{picked.length} van {count}</span>
   </div>
-  <div class="card-b" style="display:grid;gap:10px">
+  <div class="card-b stack">
     {#if team.forfeit}
       <div class="banner warn">Deze ploeg is forfait (W-O). Alle wedstrijden gaan naar de tegenstander.</div>
     {/if}
     <input type="search" placeholder="Zoek een speler (naam, klassement, lidnummer)" bind:value={query} aria-label="Zoek een speler" />
-    {#if error}<p class="error" style="margin:0">{error}</p>{/if}
+    {#if error}<p class="error">{error}</p>{/if}
     <div class="roster">
       {#each shown as m (m.uniqueIndex)}
         {@const slot = slotOf(m)}
@@ -113,14 +113,14 @@
           onclick={() => toggle(m)}
         >
           <span class="slot">{slot >= 0 ? letter(sys, singles[slot].slot, side) : '+'}</span>
-          <span style="min-width:0">
+          <span class="who">
             <span class="n">{titleCase(m.firstName)} {titleCase(m.lastName)}</span>
             <span class="meta">Index {m.rankingIndex} · nr. {m.position}{m.status === 'V' ? ' · reserve' : ''}{String(m.uniqueIndex) === captain ? ' · kapitein' : ''}</span>
           </span>
           <span class="rank">{m.ranking}</span>
         </button>
       {:else}
-        <p class="muted" style="margin:0">{list ? 'Niemand gevonden.' : 'Sterktelijst laden…'}</p>
+        <p class="muted">{list ? 'Niemand gevonden.' : 'Sterktelijst laden…'}</p>
       {/each}
     </div>
     {#if !query}
@@ -137,6 +137,6 @@
       </label>
     {/if}
     <label class="check"><input type="checkbox" checked={team.forfeit} disabled={!editable} onchange={(e) => setForfeit(e.currentTarget.checked)} /> Ploeg forfait (W-O)</label>
-    {#if side === 'away'}<p class="hint" style="margin:0">Uit de sterktelijst van VTTL. Spreek de opstelling af met de kapitein van de bezoekers.</p>{/if}
+    {#if side === 'away'}<p class="hint">Uit de sterktelijst van VTTL. Spreek de opstelling af met de kapitein van de bezoekers.</p>{/if}
   </div>
 </section>

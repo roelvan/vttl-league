@@ -20,14 +20,22 @@
   const homeLeads = $derived(game.home.sets > game.away.sets);
   const awayLeads = $derived(game.away.sets > game.home.sets);
   const status = $derived(game.state === 'next' ? (tableNo ? `Volgende op tafel ${tableNo}` : 'Volgende') : 'Later');
-  const label = $derived(
-    `Wedstrijd ${game.pos}: ${game.home.people.map((p) => p.full).join(' en ')} tegen ${game.away.people.map((p) => p.full).join(' en ')}`,
+  const who = (s: GameSide) => s.people.map((p) => p.full).filter(Boolean).join(' en ') || 'nog niet opgesteld';
+  const stateText = $derived(
+    game.state === 'error'
+      ? 'score nakijken'
+      : game.state === 'final'
+        ? `gespeeld, ${game.home.sets}–${game.away.sets} in sets`
+        : game.state === 'live'
+          ? `bezig${tableNo ? ` op tafel ${tableNo}` : ''}, ${game.home.sets}–${game.away.sets} in sets`
+          : status.toLowerCase(),
   );
+  const label = $derived(`Wedstrijd ${game.pos}: ${who(game.home)} tegen ${who(game.away)}, ${stateText}`);
 </script>
 
 {#snippet name(people: Person[])}
   {#if !people.length || !people.some((p) => p.full)}
-    <span class="faint">Nog niet opgesteld</span>
+    <span class="muted">Nog niet opgesteld</span>
   {:else if people.length === 1}
     {#if people[0].initial}<span class="fi">{`${people[0].initial}\u00a0`}</span>{/if}{people[0].last}
   {:else}
