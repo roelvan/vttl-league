@@ -4,8 +4,8 @@
 
 /* ------------------------------------------------------------------ tokens */
 :root {
-  /* Neutrals lean toward table blue. Team colours match the Flippr scoreboard: red (home = player 1)
-     vs. yellow (away = player 2). Live is magenta and warnings orange, so neither reads as a team. */
+  /* Neutrals lean toward table blue. Team colours match the Flippr scoreboard firmware: red (home = player 1)
+     vs. orange-amber (away = player 2). Live is magenta and warnings orange, so neither reads as a team. */
   --bg: #0a1020;
   --surface: #111a2d;
   --surface-2: #19243b;
@@ -14,17 +14,25 @@
   --muted: #94a1ba;
   /* --faint is for lines, dots and placeholders only. Text uses --muted (4.5:1 or more). */
   --faint: #5b6884;
-  --home: #ff5252;
-  --home-soft: rgba(255, 82, 82, 0.15);
+  /* --home fills bars, slots, large numerals and chart lines. --home-ink is small home text. */
+  --home: #d81b12;
+  --home-soft: rgba(216, 27, 18, 0.2);
+  --home-ink: #f84e3a; /* same hue, 4.5:1 or more on every dark surface */
+  --on-home: #ffffff; /* text on --home (5.1:1) */
   --away: #ffb600;
   --away-soft: rgba(255, 182, 0, 0.15);
+  /* --away fills bars, dots and slots. --away-ink is small away text and the focus ring (dark in light mode). */
+  --away-ink: #ffb600;
+  --away-big: #ffb600; /* large score numerals (24px+ bold) and chart lines */
+  --on-away: #0a1020; /* text on --away; amber stays dark-on-light in both themes */
+  --sel: #eef3fb; /* edge of the selected card */
   --live: #e879f9;
   --danger: #ff6b6b;
   --win: #34d399;
   --warn: #ff8a3d;
   --btn-bg: #eef3fb;
   --btn-fg: #0a1020;
-  --on-accent: #0a1020; /* text on --home / --away / --win / --warn / --live / --danger */
+  --on-accent: #0a1020; /* text on --win / --warn / --live / --danger */
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.035) inset, 0 10px 30px rgba(2, 6, 18, 0.35);
   --font: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --r: 14px;
@@ -35,8 +43,13 @@
 :root[data-theme='light'] {
   --bg: #f1f4f9; --surface: #ffffff; --surface-2: #edf1f7; --line: #dbe2ed;
   --fg: #0d1730; --muted: #56627c; --faint: #97a3ba;
-  --home: #c81e1e; --home-soft: rgba(200, 30, 30, 0.1);
-  --away: #925906; --away-soft: rgba(255, 182, 0, 0.18);
+  --home: #d81b12; --home-soft: rgba(216, 27, 18, 0.1); --home-ink: #d81b12;
+  /* Away = #f2b900 in light: fills, large numerals and chart lines. It is 1.8:1 on white, so small
+     away text uses --away-ink (dark) on an --away-soft tint or --away edge instead. */
+  --away: #f2b900; --away-big: #f2b900; --away-soft: rgba(242, 185, 0, 0.24);
+  --away-ink: #0d1730; --on-away: #0d1730;
+  /* Selected card / row: a calm blue-grey edge, not the near-black --fg. */
+  --sel: #7c89a3;
   --live: #a21caf; --danger: #b91c1c; --win: #047857; --warn: #c2410c;
   --btn-bg: #0d1730; --btn-fg: #ffffff; --on-accent: #ffffff;
   --shadow: 0 1px 2px rgba(13, 23, 48, 0.05), 0 8px 24px rgba(13, 23, 48, 0.06);
@@ -66,7 +79,7 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.02em; }
 .ok { color: var(--win); font-weight: 600; }
 .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em; }
 .spacer { flex: 1; }
-:focus-visible { outline: 2px solid var(--away); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--away-ink); outline-offset: 2px; }
 ::selection { background: var(--away-soft); color: var(--fg); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .stack { display: grid; gap: 12px; }
@@ -97,7 +110,7 @@ label.check { display: flex; align-items: center; gap: 10px; font-weight: 500; c
 .btn.danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
 .btn svg { width: 16px; height: 16px; flex: none; }
 .icon-btn { width: 44px; padding: 0; }
-.link-btn { background: none; border: 0; padding: 0; color: var(--away); font-weight: 600; cursor: pointer; text-decoration: underline; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--away-ink); font-weight: 600; cursor: pointer; text-decoration: underline; }
 
 /* ------------------------------------------------------------------ cards, chips */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); min-width: 0; }
@@ -195,22 +208,21 @@ button.chip { cursor: pointer; }
 .team { min-width: 0; display: grid; gap: 4px; }
 .team.away { text-align: right; justify-items: end; }
 .team-tag { font: 700 12px/1 var(--font); letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 7px; border-radius: 5px; width: max-content; }
-.home .team-tag { color: var(--home); background: var(--home-soft); }
-.away .team-tag { color: var(--away); background: var(--away-soft); }
+.home .team-tag { color: var(--home-ink); background: var(--home-soft); }
+.away .team-tag { color: var(--away-ink); background: var(--away-soft); }
 .team-name { font: 700 clamp(17px, 4vw, 26px)/1.1 var(--font); letter-spacing: -0.02em; text-wrap: balance; overflow-wrap: anywhere; }
 .team-sub { font-size: 14px; color: var(--muted); }
 .big-score { display: flex; align-items: baseline; gap: 6px; font: 700 clamp(52px, 14vw, 84px)/0.9 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .big-score .h { color: var(--home); }
-.big-score .a { color: var(--away); }
+.big-score .a { color: var(--away-big); }
 .big-score .sep { color: var(--muted); font-weight: 600; font-size: 0.6em; transform: translateY(-0.15em); }
 
 .race { padding: 6px 16px 16px; display: grid; gap: 8px; }
-.race-bar { display: grid; gap: 3px; position: relative; }
+.race-bar { display: grid; gap: 3px; }
 .seg { height: 10px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--line); }
 .seg.h { background: var(--home); border-color: transparent; }
 .seg.a { background: var(--away); border-color: transparent; }
 .seg.live { background: transparent; border: 1.5px dashed var(--live); animation: pulse 1.8s ease-in-out infinite; }
-.race-bar .mark { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--fg); border-radius: 2px; opacity: 0.55; transform: translateX(-1px); }
 .race-legend { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
 .race-legend b { color: var(--fg); font-weight: 700; }
 
@@ -240,8 +252,9 @@ button.chip { cursor: pointer; }
 .court-f { display: grid; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 15px; color: var(--muted); font-weight: 600; margin-top: auto; }
 .court-f b { color: var(--fg); }
 .court-f .btn { width: 100%; }
-.court-f .btns { display: flex; gap: 8px; }
-.court-f .btns .btn { flex: 1; }
+.court-f .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Grow from the label width and never wrap a label; a row that is too narrow stacks the buttons. */
+.court-f .btns .btn { flex: 1 1 auto; width: auto; white-space: nowrap; }
 
 /* ------------------------------------------------------------------ match order tiles */
 .order { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 10px; padding: 0 16px 16px; }
@@ -281,8 +294,8 @@ button.chip { cursor: pointer; }
   flex: none; min-width: 30px; height: 26px; padding: 0 4px; display: grid; place-items: center; border-radius: 7px;
   font: 700 13px/1 var(--font); letter-spacing: -0.02em;
 }
-.rank-tag.h { background: var(--home-soft); color: var(--home); }
-.rank-tag.a { background: var(--away-soft); color: var(--away); }
+.rank-tag.h { background: var(--home-soft); color: var(--home-ink); }
+.rank-tag.a { background: var(--away-soft); color: var(--away-ink); }
 .tally .who .n { font-weight: 600; line-height: 1.2; }
 .tally td:first-child { width: 100%; }
 .tally .wl { font: 700 18px/1 var(--font); letter-spacing: -0.02em; text-align: right; padding-left: 12px; width: 1%; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -316,7 +329,11 @@ button.chip { cursor: pointer; }
 .night-list { display: grid; gap: 10px; }
 .tm { display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); text-decoration: none; color: inherit; }
 .tm:hover { border-color: var(--faint); }
-.tm.current { border-color: var(--fg); }
+.tm.current { border-color: var(--sel); }
+:root[data-theme='light'] .tm.current { box-shadow: inset 0 0 0 1px var(--sel); } /* inset: the sidebar clips outer rings */
+/* Light: #f2b900 is too pale for text, so away pills are solid gold with dark text (8:1). */
+:root[data-theme='light'] .away .team-tag,
+:root[data-theme='light'] .rank-tag.a { background: var(--away); color: var(--on-away); }
 .tm-top { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); font-weight: 600; min-width: 0; }
 .tm-top > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tm-mid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; }
@@ -342,8 +359,8 @@ button.chip { cursor: pointer; }
 .rpick[aria-pressed='true'] { border-color: var(--home); background: var(--surface); box-shadow: 0 0 0 1px var(--home); }
 .rpick.away[aria-pressed='true'] { border-color: var(--away); box-shadow: 0 0 0 1px var(--away); }
 .rpick .slot { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font: 700 15px/1 var(--font); border: 1.5px dashed var(--faint); color: var(--faint); }
-.rpick[aria-pressed='true'] .slot { border: 0; background: var(--home); color: var(--on-accent); }
-.rpick.away[aria-pressed='true'] .slot { background: var(--away); }
+.rpick[aria-pressed='true'] .slot { border: 0; background: var(--home); color: var(--on-home); }
+.rpick.away[aria-pressed='true'] .slot { background: var(--away); color: var(--on-away); }
 .rpick .who { min-width: 0; }
 .rpick .n { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .rpick .meta { font-size: 14px; color: var(--muted); }
@@ -355,8 +372,8 @@ button.chip { cursor: pointer; }
   display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--faint); opacity: 0.6; cursor: pointer;
 }
 .cap-btn:hover:not(:disabled) { opacity: 1; background: var(--surface-2); }
-.cap-btn[aria-pressed='true'] { color: var(--home); opacity: 1; }
-.rpick.away + .cap-btn[aria-pressed='true'] { color: var(--away); }
+.cap-btn[aria-pressed='true'] { color: var(--home-ink); opacity: 1; }
+.rpick.away + .cap-btn[aria-pressed='true'] { color: var(--away-ink); }
 .cap-btn:disabled { cursor: default; }
 .lineup-cols { display: grid; gap: 16px; align-items: start; }
 .form-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); }
@@ -400,14 +417,14 @@ button.chip { cursor: pointer; }
 .vs .p.r .n { text-align: right; }
 .vs .sum { display: flex; gap: 6px; font: 700 34px/1 var(--font); font-variant-numeric: tabular-nums; }
 .vs .sum .h { color: var(--home); }
-.vs .sum .a { color: var(--away); }
+.vs .sum .a { color: var(--away-big); }
 .vs .sum .sep { color: var(--muted); }
 .glines { display: grid; gap: 8px; }
 .gline { display: grid; grid-template-columns: 64px 1fr 14px 1fr; gap: 8px; align-items: center; }
 .gline label { font: 600 13px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .gline input { height: 52px; border-radius: 12px; text-align: center; font: 700 26px/1 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; padding: 0; }
-.gline input.won.h { border-color: var(--home); color: var(--home); }
-.gline input.won.a { border-color: var(--away); color: var(--away); }
+.gline input.won.h { border-color: var(--home); color: var(--home-ink); background: var(--home-soft); }
+.gline input.won.a { border-color: var(--away); color: var(--away-ink); background: var(--away-soft); }
 .gline input.bad { border-color: var(--warn); }
 .gline .dash { text-align: center; color: var(--muted); font-weight: 700; }
 .gline.off { opacity: 0.4; }
@@ -480,7 +497,14 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .topnav { display: flex; }
   .shell { grid-template-columns: 300px minmax(0, 1fr); padding-bottom: 32px; align-items: start; }
   .shell.single { grid-template-columns: minmax(0, 1fr); }
-  .side-night { display: grid; gap: 12px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px); max-height: calc(100dvh - 72px - env(safe-area-inset-top, 0px)); overflow: auto; padding-bottom: 16px; }
+  /* The sidebar keeps the shell's 32px bottom gutter, so it does not jump up 32px at the page end.
+     Cards fade out at its bottom edge instead of a hard cut. */
+  .side-night {
+    display: grid; gap: 12px; align-content: start; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px);
+    max-height: calc(100dvh - 72px - 32px - env(safe-area-inset-top, 0px)); overflow: auto; overscroll-behavior: contain;
+    padding-bottom: 24px; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+  }
   .view-night-only { display: none !important; }
   .match-grid, .match-main, .match-aside { display: grid; gap: 16px; min-width: 0; }
   .match-aside { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
@@ -532,8 +556,8 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
-.tmo.h { color: var(--home); }
-.tmo.a { color: var(--away); }
+.tmo.h { color: var(--home-ink); }
+.tmo.a { color: var(--away-ink); border-color: var(--away); background: var(--away-soft); }
 .tmo.zero { animation: pulse 1.4s infinite; }
 .tmo.compact { font-size: 12px; padding: 2px 6px; gap: 3px; text-transform: none; letter-spacing: 0; }
 /* The team took its timeout: same mark for both teams, in the text colour (white on dark). */
@@ -550,21 +574,22 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
 .st-l { text-align: center; color: var(--muted); font-size: 14px; font-weight: 600; }
 .st-v { font: 650 17px/1 var(--font); font-variant-numeric: tabular-nums; color: var(--muted); }
 .st-v.a { text-align: right; }
-.st-v.best.h { color: var(--home); }
-.st-v.best.a { color: var(--away); }
+.st-v.best.h { color: var(--home-ink); }
+.st-v.best.a { color: var(--away-ink); }
 .st-last { display: grid; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--line); margin-top: 4px; }
 .st-last .st-l { text-align: left; }
 .dots { display: flex; gap: 4px; flex-wrap: wrap; }
 .dots i { width: 12px; height: 12px; border-radius: 50%; }
 .dots i.h, .st-legend i.h { background: var(--home); }
-.dots i.a, .st-legend i.a { background: var(--away); }
+.dots i.a { background: var(--away); }
+.st-legend i.a { background: var(--away-big); } /* matches the chart line */
 .st-sets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .st-chart { width: 100%; height: auto; margin-top: 8px; }
 .st-chart .grid { stroke: var(--line); stroke-width: 1; }
 .st-chart text { fill: var(--muted); font: 600 11px var(--font); }
 .st-chart .ln { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .st-chart .ln.h { stroke: var(--home); }
-.st-chart .ln.a { stroke: var(--away); stroke-dasharray: 5 3; }
+.st-chart .ln.a { stroke: var(--away-big); stroke-dasharray: 5 3; }
 .st-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; font-weight: 600; color: var(--muted); }
 .st-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .st-legend i { width: 10px; height: 10px; border-radius: 50%; }

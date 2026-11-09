@@ -6,8 +6,6 @@
 
   const n = $derived(view.games.length);
   const segs = $derived(view.games.map((g) => g.winner ?? (g.state === 'live' ? 'live' : '')));
-  /** The win mark sits after segment `needed` (3px gaps between segments). */
-  const markLeft = $derived(`calc((100% - ${(n - 1) * 3}px) * ${view.needed / n} + ${(view.needed - 1) * 3 + 1.5}px)`);
   const status = $derived(
     sheet.vttlLocked ? 'Gevalideerd' : view.complete ? 'Einde' : view.started ? 'live' : sheet.startHour ? `Om ${sheet.startHour}` : 'Nog niet begonnen',
   );
@@ -40,7 +38,6 @@
   <div class="race">
     <div class="race-bar" style="grid-template-columns: repeat({n}, 1fr)">
       {#each segs as s, i (i)}<span class="seg {s}" title="Wedstrijd {i + 1}"></span>{/each}
-      <span class="mark" style="left: {markLeft}" title="{view.needed} overwinningen winnen de avond"></span>
     </div>
   </div>
 </section>
