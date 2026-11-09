@@ -161,10 +161,14 @@ const upper = (s: string) => s.toUpperCase();
 /** Sends the players of a game to the board of its table and links the board to that game. */
 export async function sendToBoard(matchId: string, _sheet: Sheet, table: TableView, game: GameView) {
   if (!table.device) return;
-  const side = (g: GameView['home']) => ({
-    first: upper(g.people.length === 1 ? g.people[0].full.slice(0, g.people[0].full.length - g.people[0].last.length).trim() : ''),
-    last: upper(g.people.map((p) => p.last).join('/') || g.label),
-  });
+  // A single: first name + family name. A double: the family name of each player, one per field,
+  // so the board shows both players.
+  const side = (g: GameView['home']) => {
+    const [a, b] = g.people;
+    if (g.people.length === 2) return { first: upper(a.last), last: upper(b.last) };
+    if (g.people.length === 1) return { first: upper(a.full.slice(0, a.full.length - a.last.length).trim()), last: upper(a.last) };
+    return { first: '', last: upper(g.people.map((p) => p.last).join('/') || g.label) };
+  };
   try {
     const st = await api.linkBoard({
       device: table.device,
