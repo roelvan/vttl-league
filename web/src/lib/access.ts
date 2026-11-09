@@ -6,6 +6,12 @@ import type { Sheet } from './sheet/types';
 
 export const normClub = (c: string | null | undefined) => (c ?? '').replace('-', '').toUpperCase();
 
+/** A logged-in member of the home club (also when VTTL locked the result): may print. */
+export function isHomeMember(sheet: Sheet | undefined | null): boolean {
+  const club = normClub(session.me?.account.club);
+  return !!sheet && !!club && normClub(sheet.home.clubId) === club;
+}
+
 export function canEdit(sheet: Sheet | undefined | null): boolean {
   const club = normClub(session.me?.account.club);
   if (!sheet || !club || sheet.vttlLocked) return false;

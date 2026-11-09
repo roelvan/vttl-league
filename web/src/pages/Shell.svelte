@@ -19,7 +19,7 @@
   import { ws, connect, scheduleFlush, ensureMatch, setCurrent, onServerEvent } from '../lib/workspace.svelte';
   import { onBoardMessage, loadDevices } from '../lib/boards.svelte';
   import { session } from '../lib/session.svelte';
-  import { canEdit } from '../lib/access';
+  import { canEdit, isHomeMember } from '../lib/access';
   import { validateSheet } from '../lib/validation';
   import { shortDate, todayIso } from '../lib/format';
   import type { PrintJob } from '../lib/sheet/print';
@@ -91,7 +91,8 @@
   let dialog = $state<DialogState>(null);
   let printJob = $state<PrintJob | null>(null);
 
-  const ourMatch = $derived(!!sheet && canEdit(sheet) && (row?.isHome ?? true));
+  const homeMatch = $derived(!publicClub() && isHomeMember(sheet) && (row?.isHome ?? true));
+  const ourMatch = $derived(homeMatch && canEdit(sheet));
 
   async function onaction(a: MenuAction) {
     if (a === 'about') dialog = { kind: 'about' };
@@ -135,6 +136,7 @@
   matchId={navMatch}
   datechip={row ? `${shortDate(row.date)}${row.week ? ` · week ${row.week}` : ''}` : pub ? (data.publicMatches[pub]?.club?.name ?? pub) : ''}
   {onaction}
+  printActions={homeMatch}
   matchActions={ourMatch}
 />
 
@@ -153,7 +155,7 @@
         <p>Kies links een wedstrijd van de clubavond om ze live te volgen.</p>
       </div>
     {:else if m.section === 'match' && m.id}
-      {#key m.id}<MatchPage matchId={m.id} {row} {onaction} />{/key}
+      {#key m.id}<MatchPage matchId={m.id} {row} {onaction} canPrint={homeMatch} />{/key}
     {:else if m.section === 'lineup' && m.id}
       {#key m.id}<LineUpPage matchId={m.id} {row} />{/key}
     {:else}

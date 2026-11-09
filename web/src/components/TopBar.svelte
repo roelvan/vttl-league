@@ -12,13 +12,16 @@
     matchId,
     datechip = '',
     onaction,
+    printActions = false,
     matchActions = false,
   }: {
     section: 'match' | 'night' | 'lineup' | 'other';
     matchId: string | null;
     datechip?: string;
     onaction: (a: MenuAction) => void;
-    /** Show print / upload / validate (a match of our club is open). */
+    /** Show print (a home match of our club is open, also when validated). */
+    printActions?: boolean;
+    /** Show validate / upload (a home match of our club that can still change). */
     matchActions?: boolean;
   } = $props();
 
@@ -65,11 +68,13 @@
       {#if open}
         <div class="menu" role="menu">
           {#if session.me?.account.memberName}<div class="who">{session.me.account.memberName} · {session.me.account.club}{session.me.account.canUpload ? ' · kan uploaden' : ''}</div><hr />{/if}
-          {#if matchActions}
+          {#if printActions}
             <button role="menuitem" type="button" onclick={() => pick('print')}><Icon name="print" />Wedstrijdblad afdrukken</button>
             <button role="menuitem" type="button" onclick={() => pick('slips')}><Icon name="print" />Scheidsrechterblaadjes</button>
-            <button role="menuitem" type="button" onclick={() => pick('validate')}><Icon name="check" />Valideren</button>
-            <button role="menuitem" type="button" onclick={() => pick('upload')}><Icon name="upload" />Upload naar VTTL</button>
+            {#if matchActions}
+              <button role="menuitem" type="button" onclick={() => pick('validate')}><Icon name="check" />Valideren</button>
+              <button role="menuitem" type="button" onclick={() => pick('upload')}><Icon name="upload" />Upload naar VTTL</button>
+            {/if}
             <hr />
           {/if}
           {#if matchId}<button role="menuitem" type="button" onclick={() => pick('share')}><Icon name="share" />Publieke link kopiëren</button>{/if}

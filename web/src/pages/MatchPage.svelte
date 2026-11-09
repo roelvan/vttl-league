@@ -15,7 +15,12 @@
   import { urls, type MenuAction } from '../lib/nav';
   import type { MatchRow } from '../lib/types';
 
-  let { matchId, row, onaction }: { matchId: string; row: MatchRow | null; onaction: (a: MenuAction) => void } = $props();
+  let {
+    matchId,
+    row,
+    onaction,
+    canPrint,
+  }: { matchId: string; row: MatchRow | null; onaction: (a: MenuAction) => void; canPrint: boolean } = $props();
 
   const sheet = $derived(ws.entries[matchId]?.view);
   const view = $derived.by(() => {
@@ -81,7 +86,7 @@
 
     <div class="match-aside">
       <PlayersTally {sheet} {view} />
-      <MatchDetails {sheet} {view} onaction={editable ? onaction : undefined} />
+      <MatchDetails {sheet} {view} onaction={canPrint ? onaction : undefined} canUpload={editable} />
       {#if editable}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
           <span class="ico"><Icon name="lineup" size={22} /></span>

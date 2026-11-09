@@ -10,7 +10,14 @@
     sheet,
     view,
     onaction,
-  }: { sheet: Sheet; view: LiveView; /** Set for editors: shows the print and upload buttons. */ onaction?: (a: MenuAction) => void } = $props();
+    canUpload = false,
+  }: {
+    sheet: Sheet;
+    view: LiveView;
+    /** Set for home-club members: shows the print buttons. */
+    onaction?: (a: MenuAction) => void;
+    canUpload?: boolean;
+  } = $props();
 
   const status = $derived(sheet.isOfficial ? vttlStatus(sheet, view.sys) : null);
   const upload = $derived(sheet.upload);
@@ -43,10 +50,10 @@
     </dl>
     {#if sheet.comments}<p class="hint">{sheet.comments}</p>{/if}
     {#if onaction}
-      <div class="detail-actions">
+      <div class="detail-actions" class:two={!canUpload}>
         <button class="btn ghost" type="button" onclick={() => onaction('print')}><Icon name="print" size={16} />Wedstrijdblad</button>
         <button class="btn ghost" type="button" onclick={() => onaction('slips')}><Icon name="print" size={16} />Blaadjes</button>
-        <button class="btn ghost" type="button" onclick={() => onaction('upload')}><Icon name="upload" size={16} />Upload</button>
+        {#if canUpload}<button class="btn ghost" type="button" onclick={() => onaction('upload')}><Icon name="upload" size={16} />Upload</button>{/if}
       </div>
     {/if}
   </div>

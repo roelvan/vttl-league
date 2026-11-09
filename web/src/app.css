@@ -280,6 +280,7 @@ button.chip { cursor: pointer; }
 .info dt { color: var(--muted); font-weight: 500; }
 .info dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 .detail-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.detail-actions.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .detail-actions .btn { padding: 8px 6px; font-size: 14px; gap: 6px; }
 
 .prep { display: flex; gap: 14px; align-items: center; padding: 16px; text-decoration: none; color: inherit; }
