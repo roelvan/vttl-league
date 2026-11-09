@@ -16,13 +16,13 @@
     filters = true,
   }: { day: string; rows: MatchRow[]; loaded: boolean; currentId?: string | null; filters?: boolean } = $props();
 
-  type Filter = 'all' | 'live' | 'home' | 'away';
+  type Filter = 'all' | 'live' | 'final';
   let filter = $state<Filter>('all');
 
   const days = $derived(matchDays(rows));
   const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, ws.entries[r.matchId]?.view)));
   const shown = $derived(
-    cards.filter((c) => (filter === 'live' ? c.state === 'live' : filter === 'home' ? c.isHome : filter === 'away' ? !c.isHome : true)),
+    cards.filter((c) => (filter === 'all' ? true : c.state === filter)),
   );
   const week = $derived(matchesOn(rows, day).find((r) => r.week)?.week ?? '');
   const prev = $derived(days.filter((d) => d < day).at(-1));
@@ -46,7 +46,7 @@
 
 {#if filters && cards.length > 1}
   <div class="filters" role="group" aria-label="Filter ploegen">
-    {#each [['all', 'Alle'], ['live', 'Live'], ['home', 'Thuis'], ['away', 'Uit']] as [k, l] (k)}
+    {#each [['all', 'Alle'], ['live', 'Bezig'], ['final', 'Klaar']] as [k, l] (k)}
       <button class="seg-btn" type="button" aria-pressed={filter === k} onclick={() => (filter = k as Filter)}>{l}</button>
     {/each}
   </div>
