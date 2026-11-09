@@ -111,8 +111,7 @@ export const api = {
   sheet: (id: string) => request<StoredSheet>('GET', `/api/sheet?id=${encodeURIComponent(id)}`),
   createSheet: (doc: Sheet) =>
     request<{ sheet: StoredSheet; created: boolean }>('PUT', '/api/sheet', { id: doc.id, day: doc.day, season: doc.season, doc }),
-  upload: (id: string, data: string, partial: boolean) =>
-    request<{ ok: boolean; dryRun: boolean; errors: string[] }>('POST', '/api/upload', { id, data, partial }),
+  upload: (id: string) => request<{ ok: boolean; dryRun: boolean; partial: boolean; errors: string[]; data: string }>('POST', '/api/upload', { id }),
   devices: () => request<Device[]>('GET', '/api/devices'),
   saveDevice: (id: string, alias: string) => request<void>('PUT', '/api/devices', { id, alias }),
   deleteDevice: (id: string) => request<void>('DELETE', `/api/devices?id=${encodeURIComponent(id)}`),

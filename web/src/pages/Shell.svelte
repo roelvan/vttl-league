@@ -16,14 +16,11 @@
   import { matchIdFromSlug, urls, type MenuAction } from '../lib/nav';
   import { data, loadCategories, loadClubs, loadMatches, loadPublicMatches } from '../lib/data.svelte';
   import { viewer, viewClub, publicClub } from '../lib/viewer.svelte';
-  import { ws, connect, scheduleFlush, ensureMatch, setCurrent, onServerEvent, uploadSheet } from '../lib/workspace.svelte';
+  import { ws, connect, scheduleFlush, ensureMatch, setCurrent, onServerEvent } from '../lib/workspace.svelte';
   import { onBoardMessage, loadDevices } from '../lib/boards.svelte';
   import { session } from '../lib/session.svelte';
   import { canEdit } from '../lib/access';
   import { validateSheet } from '../lib/validation';
-  import { settings } from '../lib/settings.svelte';
-  import { getSystem } from '../lib/sheet/systems';
-  import { vttlStatus } from '../lib/sheet/vttl';
   import { shortDate, todayIso } from '../lib/format';
   import type { PrintJob } from '../lib/sheet/print';
   import { tick } from 'svelte';
@@ -125,25 +122,12 @@
       'afterprint',
       () => {
         printJob = null;
-        if (job.what === 'sheet') autoUpload(job.id);
       },
       { once: true },
     );
     window.print();
   }
 
-  /** ScoreSheet: after printing, a valid official sheet is uploaded automatically. */
-  async function autoUpload(id: string) {
-    const s = ws.entries[id]?.view;
-    if (!settings.autoUpload || !s || !s.isOfficial || s.vttlLocked || !getSystem(s.matchSystemId).competitive) return;
-    if (vttlStatus(s, getSystem(s.matchSystemId)) === 'synced' || validateSheet(s).length) return;
-    try {
-      const r = await uploadSheet(id, false);
-      ws.message = r.ok ? `Uitslag ${r.dryRun ? '(proef) ' : ''}naar VTTL gestuurd na het afdrukken` : `Upload mislukt: ${r.errors.join('; ')}`;
-    } catch (e) {
-      ws.message = `Upload na afdrukken mislukt: ${e instanceof Error ? e.message : e}`;
-    }
-  }
 </script>
 
 <TopBar

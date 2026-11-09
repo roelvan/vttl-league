@@ -248,7 +248,7 @@ pub struct OpsBody {
 
 pub async fn ops(State(app): State<Arc<App>>, u: User, Json(b): Json<OpsBody>) -> Result<Json<Value>, ApiError> {
     let club = u.club()?;
-    if b.ops.len() > MAX_OPS || b.client_id.is_empty() || b.client_id.len() > 64 {
+    if b.ops.len() > MAX_OPS || b.client_id.is_empty() || b.client_id.len() > 64 || b.client_id.starts_with("server:") || b.client_id.starts_with("board:") {
         return Err(ApiError::BadRequest("Ongeldige wijziging".into()));
     }
     let r = app
@@ -260,6 +260,7 @@ pub async fn ops(State(app): State<Arc<App>>, u: User, Json(b): Json<OpsBody>) -
         Applied::Duplicate(rev) => rev,
         Applied::Done(rev) => {
             app.push(club, json!({ "type": "ops", "id": b.id, "rev": rev, "clientId": b.client_id, "ops": b.ops }));
+            crate::uploader::schedule(&app, club, &b.id);
             rev
         }
     };

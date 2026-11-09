@@ -5,7 +5,8 @@
 //! and stores the link. Updates (`tabletennis/{device}/{boardMatch}/update`) count only for a
 //! linked device; the first update after the link fixes the board's own match id, and updates
 //! for any other board match are ignored. When the board match is finished, the server writes
-//! the set scores into the match and removes the link. Player 1 on the board = home side.
+//! the set scores into the match (the server then uploads it) and removes the link.
+//! Player 1 on the board = home side.
 
 use crate::api::ApiError;
 use crate::app::App;
@@ -282,7 +283,7 @@ pub async fn run(app: Arc<App>, mut eventloop: rumqttc::EventLoop) {
     }
 }
 
-fn on_publish(app: &App, topic: &str, payload: &[u8]) -> anyhow::Result<()> {
+fn on_publish(app: &Arc<App>, topic: &str, payload: &[u8]) -> anyhow::Result<()> {
     let Some((device, topic_match, kind)) = parse_topic(topic) else { return Ok(()) };
     if kind != "update" {
         return Ok(());
@@ -324,15 +325,15 @@ fn on_publish(app: &App, topic: &str, payload: &[u8]) -> anyhow::Result<()> {
 }
 
 /// Puts the set scores of a finished board match into the match record, like a client edit.
-fn write_result(app: &App, link: &Link, s: &MatchState) -> anyhow::Result<()> {
+fn write_result(app: &Arc<App>, link: &Link, s: &MatchState) -> anyhow::Result<()> {
     let Some(sheet) = app.db.sheet(&link.club, &link.sheet)? else { return Ok(()) };
     let boxes = sheet.doc["results"][link.game as usize].as_array().map(|a| a.len()).unwrap_or(s.best_of as usize).max(s.games.len());
     let ops = vec![Op { p: vec![json!("results"), json!(link.game)], v: result_boxes(s, boxes) }];
     let client = format!("board:{}", link.device);
     let seq = now_ms();
     if let Some(Applied::Done(rev)) = app.db.apply_ops(&link.club, &link.sheet, &client, seq, &ops, &link.account)? {
-        // `by` tells the client of the captain who linked the board to upload the new score.
-        app.push(&link.club, json!({ "type": "ops", "id": link.sheet, "rev": rev, "clientId": client, "ops": ops, "by": link.account }));
+        app.push(&link.club, json!({ "type": "ops", "id": link.sheet, "rev": rev, "clientId": client, "ops": ops }));
+        crate::uploader::schedule(app, &link.club, &link.sheet);
         tracing::info!(club = %link.club, sheet = %link.sheet, game = link.game, "board result saved");
     }
     Ok(())

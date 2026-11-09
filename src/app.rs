@@ -18,6 +18,8 @@ pub struct App {
     pub events: broadcast::Sender<(String, String)>,
     /// Scoreboards: MQTT connection and last state per board.
     pub boards: Boards,
+    /// Server-side uploads to VTTL (debounce and lock per match).
+    pub uploads: crate::uploader::Uploads,
 }
 
 impl App {

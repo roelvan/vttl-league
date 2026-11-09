@@ -31,8 +31,6 @@
         {#each SLIP_LAYOUTS as [v, l] (v)}<option value={v}>{l}</option>{/each}
       </select>
     </label>
-  {:else}
-    <label class="check"><input type="checkbox" bind:checked={settings.autoUpload} onchange={saveSettings} /> Na het afdrukken de uitslag naar VTTL sturen (als ze geldig is)</label>
   {/if}
   {#if errors.length}
     <details class="banner warn" open={confirmErrors}>

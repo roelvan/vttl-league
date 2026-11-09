@@ -410,45 +410,21 @@ async fn match_systems(State(app): State<Arc<App>>, u: User) -> R<Vec<tabt::Matc
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct UploadBody {
-    /// Sheet id, for the log and the push to the other devices.
+    /// The match (sheet) id. The server builds the upload lines from the stored match.
     id: String,
-    /// TabT upload file (C header + I lines), built by the client (web/src/lib/sheet/export.ts).
-    data: String,
-    partial: bool,
 }
 
-/// Sends a result to VTTL with the credentials of the user, or only logs it in dry-run mode.
-/// VTTL checks the rights itself (fault 22 = no permission for this club).
+/// A manual upload (retry or correction). The server also uploads by itself after every change
+/// (src/uploader.rs); this one tries the login of the user first and sends even when nothing changed.
 async fn upload(State(app): State<Arc<App>>, u: User, Json(b): Json<UploadBody>) -> R<Value> {
     let club = u.club()?.to_string();
-    if b.data.len() > 64 * 1024 || !b.data.lines().any(|l| l.starts_with("I;")) {
-        return Err(ApiError::BadRequest("Ongeldig uploadbestand".into()));
-    }
-    let dry_run = !app.upload_enabled;
-    let (ok, errors) = if dry_run {
-        (true, vec![])
-    } else {
-        match app.tabt.upload(&u.creds, &b.data).await {
-            Ok((ok, lines)) => (ok, lines),
-            Err(e) => match e.downcast_ref::<crate::xml::Fault>() {
-                Some(f) if f.code == "22" => (false, vec![format!("Geen uploadrechten voor deze club (VTTL-fout 22: {})", f.message)]),
-                Some(f) => (false, vec![format!("VTTL-fout {}: {}", f.code, f.message)]),
-                None => return Err(ApiError::vttl(e)),
-            },
-        }
-    };
-    app.db.log_upload(&club, &b.id, &u.account.account, b.partial, dry_run, ok, &b.data, &errors)?;
-    tracing::info!(club = %club, id = %b.id, partial = b.partial, dry_run, ok, "upload");
-    if ok && !dry_run {
-        app.db.mark_can_upload(&u.account.account)?;
-        // The next read must show what we just sent.
-        app.tabt.invalidate(&club);
-        app.tabt.invalidate(&club.replace('-', ""));
-    }
-    app.push(&club, json!({ "type": "upload", "id": b.id, "ok": ok, "dryRun": dry_run, "partial": b.partial }));
-    Ok(Json(json!({ "ok": ok, "dryRun": dry_run, "errors": errors })))
+    let o = crate::uploader::upload(&app, &club, &b.id, true, Some(u.creds.clone())).await?;
+    Ok(Json(match o {
+        Some(o) => json!(o),
+        None => json!({ "ok": false, "dryRun": !app.upload_enabled, "partial": false, "data": "",
+            "errors": ["Er is niets te uploaden: geen officiële competitiewedstrijd, al gevalideerd, of er loopt al een upload."] }),
+    }))
 }
 
 /// "ROEL" -> "Roel", "JEAN-PIERRE" -> "Jean-Pierre".

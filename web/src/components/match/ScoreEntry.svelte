@@ -33,10 +33,36 @@
 
   const sys = $derived(getSystem(sheet.matchSystemId));
   const readonly = $derived(!editable || boardBusy);
-  // The sheet opens new for each game: read the scores once, then edit locally until "Bewaren".
-  const initial = untrack(() => $state.snapshot(sheet.results[game.index] ?? []) as SetScore[]);
+  // Every set goes to the server while you type (after a short pause), so all devices see it.
+  // A change from another device is taken over when this device has nothing waiting to send.
   const boxCount = untrack(() => getSystem(sheet.matchSystemId).boxes);
-  let boxes = $state<SetScore[]>(Array.from({ length: boxCount }, (_, i) => ({ l: initial[i]?.l ?? '', r: initial[i]?.r ?? '' })));
+  const fill = (src: SetScore[] | undefined) => Array.from({ length: boxCount }, (_, i) => ({ l: src?.[i]?.l ?? '', r: src?.[i]?.r ?? '' }));
+  const initial = untrack(() => fill($state.snapshot(sheet.results[game.index]) as SetScore[]));
+  let boxes = $state<SetScore[]>(structuredClone(initial));
+  let sent = JSON.stringify(initial);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  function push() {
+    clearTimeout(timer);
+    timer = undefined;
+    const now = JSON.stringify(boxes);
+    if (readonly || now === sent) return;
+    sent = now;
+    change(id, [{ p: ['results', game.index], v: $state.snapshot(boxes) }]);
+  }
+  function pushSoon() {
+    clearTimeout(timer);
+    timer = setTimeout(push, 700);
+  }
+
+  $effect(() => {
+    const remote = JSON.stringify(fill($state.snapshot(sheet.results[game.index]) as SetScore[]));
+    untrack(() => {
+      if (timer || remote === sent) return;
+      sent = remote;
+      boxes = JSON.parse(remote);
+    });
+  });
   let focus = $state(Math.min(initial.filter((s) => !isEmptySet(s)).length, boxCount - 1));
 
   const result = $derived(gameResult(boxes, sys, sheet.home.forfeit, sheet.away.forfeit));
@@ -58,7 +84,6 @@
       ? notation(boxes.map((s) => ({ h: Number(s.l), a: Number(s.r) })).filter((s) => Number.isFinite(s.h) && Number.isFinite(s.a)))
       : gameNotation(result.won, boxes, sys),
   );
-  const changed = $derived(boxes.some((b, i) => b.l !== (initial[i]?.l ?? '') || b.r !== (initial[i]?.r ?? '')));
 
   const names = (side: 'home' | 'away') => game[side].people.map((p) => (p.initial ? `${p.initial} ${p.last}` : p.last)).join(' / ') || game[side].label;
 
@@ -67,6 +92,7 @@
     const v = inp.value.toUpperCase().replace(/[^0-9WOF]/g, '');
     inp.value = v;
     boxes[i][side] = v;
+    pushSoon();
   }
 
   function quick(q: 'home11' | 'away11' | 'clear' | 'homeWO' | 'awayWO') {
@@ -85,10 +111,11 @@
       boxes = boxes.map((_, i) => (i === 0 ? (q === 'homeWO' ? { l: 'WO', r: '' } : { l: '', r: 'WO' }) : { l: '', r: '' }));
       focus = 0;
     }
+    pushSoon();
   }
 
   function save() {
-    if (!readonly && changed) change(id, [{ p: ['results', game.index], v: $state.snapshot(boxes) }]);
+    push();
     onclose();
   }
 
@@ -100,7 +127,7 @@
   }
 </script>
 
-<Dialog title="Wedstrijd {game.pos}" chip={tableNo ? `Tafel ${tableNo}${boardBusy ? ' · scorebord' : ''}` : game.state === 'final' ? 'Gespeeld' : 'Nog niet begonnen'} {onclose}>
+<Dialog title="Wedstrijd {game.pos}" chip={tableNo ? `Tafel ${tableNo}${boardBusy ? ' · scorebord' : ''}` : game.state === 'final' ? 'Gespeeld' : 'Nog niet begonnen'} onclose={save}>
   <div class="vs">
     <div class="p"><span class="letter h">{game.home.label.length > 2 ? 'D' : game.home.label}</span><span class="n">{names('home')}</span></div>
     <div class="sum"><span style="color:var(--home)">{homeSets}</span><span style="color:var(--faint)">–</span><span style="color:var(--away)">{awaySets}</span></div>
@@ -174,7 +201,7 @@
     {#if readonly}
       <button class="btn big" type="button" onclick={onclose}>Sluiten</button>
     {:else}
-      <button class="btn big" type="button" onclick={save}>Score bewaren</button>
+      <button class="btn big" type="button" onclick={save}>Klaar</button>
     {/if}
   {/snippet}
 </Dialog>

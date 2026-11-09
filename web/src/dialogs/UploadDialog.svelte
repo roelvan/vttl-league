@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Manual upload of one match to VTTL. The app also uploads by itself (partial after each
-  // game, full when complete); this is for a retry or a correction.
+  // Manual upload of one match to VTTL. The server also uploads by itself after every change
+  // (partial after each game, full when complete); this is for a retry or a correction.
   import Dialog from './Dialog.svelte';
   import VttlIcon from '../components/VttlIcon.svelte';
   import { ws, uploadSheet, type UploadResult } from '../lib/workspace.svelte';
@@ -31,7 +31,7 @@
     }
     busy = true;
     try {
-      result = await uploadSheet(id, !complete);
+      result = await uploadSheet(id);
     } catch (e) {
       result = { ok: false, error: e instanceof Error ? e.message : 'Upload mislukt' };
     } finally {

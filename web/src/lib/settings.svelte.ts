@@ -6,11 +6,9 @@ interface Settings {
   /** Dark is the default (design); the sun button switches. */
   theme: 'dark' | 'light';
   slipLayout: SlipLayout;
-  /** ScoreSheet "auto-upload": upload a valid result after printing the sheet. */
-  autoUpload: boolean;
 }
 
-const defaults: Settings = { theme: 'dark', slipLayout: '2x4', autoUpload: true };
+const defaults: Settings = { theme: 'dark', slipLayout: '2x4' };
 
 function load(): Settings {
   try {

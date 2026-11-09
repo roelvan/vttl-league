@@ -4,10 +4,12 @@ mod auth;
 mod boards;
 mod crypto;
 mod public;
+mod rules;
 mod db;
 mod scoreboard;
 mod sheets;
 mod tabt;
+mod uploader;
 mod xml;
 
 use app::App;
@@ -44,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
         events: tokio::sync::broadcast::channel(1024).0,
         upload_enabled: var("UPLOAD_ENABLED").is_ok_and(|v| v == "true"),
         boards,
+        uploads: uploader::Uploads::default(),
     });
     if let Some(eventloop) = mqtt {
         tokio::spawn(boards::run(app.clone(), eventloop));

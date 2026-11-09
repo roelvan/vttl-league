@@ -19,9 +19,7 @@ import { getSystem } from './sheet/systems';
 import { computeScore, isByeClub } from './sheet/score';
 import { session } from './session.svelte';
 import { publicClub } from './viewer.svelte';
-import { importOps, uploadOps, vttlStatus } from './sheet/vttl';
-import { validateSheet } from './validation';
-import { exportCsv } from './sheet/export';
+import { importOps } from './sheet/vttl';
 import { data, loadMembers, loadCategories, defaultCategory, clubName, memberKey } from './data.svelte';
 import { fromVttl } from './sheet/create';
 import type { Member, MatchRow } from './types';
@@ -161,10 +159,6 @@ export function change(id: string, ops: Op[], source: 'user' | 'vttl' = 'user') 
     const hh = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     change(id, [{ p: ['endHour'], v: hh }], 'vttl');
   }
-  // VTTL wants results as soon as possible: a partial upload when the team score changes,
-  // and the full upload as soon as the result is complete.
-  if (after.complete) scheduleFull(id);
-  else if (before.home !== after.home || before.away !== after.away) scheduleLive(id);
 }
 
 function teamScore(s: Sheet) {
@@ -341,7 +335,8 @@ async function refreshAll() {
 
 // ---------------------------------------------------------------- live updates
 
-type Listener = (msg: { type: string; id?: string; day?: string }) => void;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Listener = (msg: { type: string; id?: string; day?: string; [k: string]: any }) => void;
 const listeners = new Set<Listener>();
 export const onServerEvent = (l: Listener) => (listeners.add(l), () => listeners.delete(l));
 
@@ -389,9 +384,10 @@ export function connect() {
           recompute(e);
           persist();
         } else if (msg.rev > e.rev) refresh(msg.id).catch(() => {});
-        // A scoreboard result: the captain who linked the board uploads it (only one device does).
-        if (typeof msg.clientId === 'string' && msg.clientId.startsWith('board:') && msg.by && msg.by === session.me?.account.account) uploadSoon(msg.id);
       }
+    } else if (msg.type === 'upload' && !publicClub()) {
+      const what = msg.partial ? 'Tussenstand' : 'Uitslag';
+      ws.message = msg.ok ? `${what} ${msg.dryRun ? '(proef) ' : ''}naar VTTL gestuurd` : `Upload naar VTTL mislukt: ${(msg.errors ?? []).join('; ')}`;
     } else if (msg.type === 'resync') {
       refreshAll();
     }
@@ -462,100 +458,19 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // ---------------------------------------------------------------- VTTL: upload
+// The server uploads by itself after every stored change (src/uploader.rs). This is the manual
+// upload: first send our waiting changes, so the server uploads what this screen shows.
 
 export interface UploadResult {
   ok: boolean;
   dryRun: boolean;
+  partial: boolean;
   errors: string[];
   data: string;
 }
 
-/** Uploads one sheet (full or partial) and records the result in the sheet. */
-export async function uploadSheet(id: string, partial = false): Promise<UploadResult> {
-  const s = $state.snapshot(ws.entries[id].view) as Sheet;
-  const sys = getSystem(s.matchSystemId);
-  const csv = exportCsv([{ sheet: s, sys }], partial);
-  const r = await api.upload(id, csv, partial);
-  change(id, uploadOps(s, sys, { at: Date.now(), by: session.me?.account.account ?? '', ok: r.ok, partial, dryRun: r.dryRun, errors: r.errors }), 'vttl');
-  return { ...r, data: csv };
+export async function uploadSheet(id: string): Promise<UploadResult> {
+  await flush();
+  if (hasPending(id)) throw new Error('Nog niet alle wijzigingen zijn bij de server. Probeer opnieuw als er verbinding is.');
+  return api.upload(id);
 }
-
-const liveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const liveBusy = new Set<string>();
-/** Complete results that still wait for their full upload (offline, or busy). */
-const fullWaiting = new Set<string>();
-
-function canUpload(s: Sheet) {
-  const sys = getSystem(s.matchSystemId);
-  return s.isOfficial && sys.competitive && !s.vttlLocked;
-}
-
-/** Upload after a change that did not come from this device's own edit. */
-function uploadSoon(id: string) {
-  const s = ws.entries[id]?.view;
-  if (!s) return;
-  if (teamScore(s).complete) scheduleFull(id);
-  else scheduleLive(id);
-}
-
-function scheduleLive(id: string) {
-  clearTimeout(liveTimers.get(id));
-  liveTimers.set(id, setTimeout(() => liveUpload(id), 1500));
-}
-
-/** ScoreSheet LiveUpdateService rules, always on. */
-async function liveUpload(id: string) {
-  const e = ws.entries[id];
-  const s = e?.view;
-  if (!s || e.draft || !session.online || !canUpload(s) || s.disablePartialUpload) return;
-  // A complete result is never sent as a live update: the full upload sends it.
-  if (teamScore(s).complete) return;
-  if (liveBusy.has(id)) return scheduleLive(id);
-  liveBusy.add(id);
-  try {
-    const r = await uploadSheet(id, true);
-    ws.message = r.ok
-      ? `Tussenstand ${r.dryRun ? '(proef) ' : ''}naar VTTL gestuurd (${new Date().toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })})`
-      : `Tussenstand naar VTTL mislukt: ${r.errors.join('; ')}`;
-  } catch {
-    // Offline: the next score change sends it.
-  } finally {
-    liveBusy.delete(id);
-  }
-}
-
-function scheduleFull(id: string) {
-  fullWaiting.add(id);
-  clearTimeout(liveTimers.get(id));
-  // A short wait: a captain often corrects the last score right after typing it.
-  liveTimers.set(id, setTimeout(() => fullUpload(id), 5000));
-}
-
-/** The full upload of a complete result, when it is valid. Retried when the device is online again. */
-async function fullUpload(id: string) {
-  const e = ws.entries[id];
-  const s = e?.view;
-  if (!s || e.draft || !canUpload(s) || !teamScore(s).complete) return void fullWaiting.delete(id);
-  if (vttlStatus(s, getSystem(s.matchSystemId)) === 'synced') return void fullWaiting.delete(id);
-  if (!session.online || liveBusy.has(id)) return;
-  const errors = validateSheet(s);
-  if (errors.length) {
-    fullWaiting.delete(id);
-    ws.message = `De uitslag is volledig, maar niet geüpload: ${errors.length} validatiefout(en). Kijk via het menu ⋯ › Valideren.`;
-    return;
-  }
-  liveBusy.add(id);
-  try {
-    const r = await uploadSheet(id, false);
-    fullWaiting.delete(id);
-    ws.message = r.ok ? `Volledige uitslag ${r.dryRun ? '(proef) ' : ''}naar VTTL gestuurd` : `Upload naar VTTL mislukt: ${r.errors.join('; ')}`;
-  } catch {
-    // Offline: retried on the next "online" event.
-  } finally {
-    liveBusy.delete(id);
-  }
-}
-
-addEventListener('online', () => {
-  for (const id of fullWaiting) setTimeout(() => fullUpload(id), 2000);
-});
