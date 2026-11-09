@@ -1,4 +1,7 @@
-// The open match sheets and their sync with the server.
+// The stored match records ("sheets", never shown as such in the UI) and their sync.
+//
+// A match that has no stored record yet gets a local *draft* made from VTTL, so it can be shown.
+// The draft is sent to the server only at the first user edit (`change` with source "user").
 //
 // Each sheet has a `base` (the last version the server confirmed, with its `rev`) and a queue
 // of local batches of ops that the server has not confirmed yet. What the screen shows is
@@ -15,11 +18,12 @@ import type { Sheet } from './sheet/types';
 import { getSystem } from './sheet/systems';
 import { computeScore, isByeClub } from './sheet/score';
 import { session } from './session.svelte';
-import { settings } from './settings.svelte';
-import { importOps, uploadOps } from './sheet/vttl';
+import { importOps, uploadOps, vttlStatus } from './sheet/vttl';
+import { validateSheet } from './validation';
 import { exportCsv } from './sheet/export';
-import { data, loadMembers, defaultCategory, clubName, memberKey } from './data.svelte';
-import type { Member } from './types';
+import { data, loadMembers, loadCategories, defaultCategory, clubName, memberKey } from './data.svelte';
+import { fromVttl } from './sheet/create';
+import type { Member, MatchRow } from './types';
 
 interface Batch {
   client: string | null;
@@ -34,25 +38,34 @@ export interface Entry {
   pending: Batch[];
   /** Made on this device while offline: the server does not have it yet. */
   needsCreate: boolean;
+  /** Made from VTTL for display only. Becomes a real record at the first user edit. */
+  draft?: boolean;
 }
-
-export type Screen = 'overview' | string;
 
 const KEY = 'vl.workspace';
 
 interface Persisted {
   entries: Record<string, Omit<Entry, 'view'>>;
-  open: string[];
-  active: Screen | null;
+  current: string | null;
   seq: number;
 }
+
+/** Records of older days are dropped from this device when they have nothing to send. */
+const KEEP_DAYS = 4;
 
 function restore(): Persisted {
   try {
     const v = localStorage.getItem(KEY);
-    if (v) return JSON.parse(v);
+    if (v) {
+      const p = JSON.parse(v) as Persisted;
+      const limit = new Date(Date.now() - KEEP_DAYS * 86400000).toISOString().slice(0, 10);
+      for (const [id, e] of Object.entries(p.entries ?? {})) {
+        if (!e.pending.length && !e.needsCreate && (e.base.day || '0') < limit) delete p.entries[id];
+      }
+      return { entries: p.entries ?? {}, current: p.current ?? null, seq: p.seq ?? 0 };
+    }
   } catch {}
-  return { entries: {}, open: [], active: null, seq: 0 };
+  return { entries: {}, current: null, seq: 0 };
 }
 
 const saved = restore();
@@ -70,9 +83,9 @@ export const ws = $state({
   entries: Object.fromEntries(
     Object.entries(saved.entries).map(([id, e]) => [id, { ...e, view: applyOps(e.base, e.pending.flatMap((b) => b.ops)) }]),
   ) as Record<string, Entry>,
-  open: saved.open,
-  active: saved.active as Screen | null,
-  /** Short status for the status bar. */
+  /** The match shown last (target of the "Wedstrijd" and "Opstelling" nav items). */
+  current: saved.current,
+  /** Short status line (toast). */
   message: '',
   syncing: false,
   live: false,
@@ -91,18 +104,19 @@ function persist() {
     persistQueued = false;
     const entries: Persisted['entries'] = {};
     for (const [id, e] of Object.entries(ws.entries)) {
-      entries[id] = { base: $state.snapshot(e.base) as Sheet, rev: e.rev, pending: $state.snapshot(e.pending) as Batch[], needsCreate: e.needsCreate };
+      entries[id] = { base: $state.snapshot(e.base) as Sheet, rev: e.rev, pending: $state.snapshot(e.pending) as Batch[], needsCreate: e.needsCreate, draft: e.draft };
     }
     try {
-      localStorage.setItem(KEY, JSON.stringify({ entries, open: $state.snapshot(ws.open), active: ws.active, seq } satisfies Persisted));
+      localStorage.setItem(KEY, JSON.stringify({ entries, current: ws.current, seq } satisfies Persisted));
     } catch {}
   });
 }
 
-export const pendingCount = () => Object.values(ws.entries).reduce((n, e) => n + e.pending.reduce((m, b) => m + b.ops.length, 0) + (e.needsCreate ? 1 : 0), 0);
+export const pendingCount = () =>
+  Object.values(ws.entries).reduce((n, e) => (e.draft ? n : n + e.pending.reduce((m, b) => m + b.ops.length, 0) + (e.needsCreate ? 1 : 0)), 0);
 export const hasPending = (id: string) => {
   const e = ws.entries[id];
-  return !!e && (e.pending.length > 0 || e.needsCreate);
+  return !!e && !e.draft && (e.pending.length > 0 || e.needsCreate);
 };
 
 function recompute(e: Entry) {
@@ -112,6 +126,8 @@ function recompute(e: Entry) {
 function adopt(e: Entry, s: StoredSheet) {
   e.base = s.doc;
   e.rev = s.rev;
+  e.draft = false;
+  e.needsCreate = false;
   recompute(e);
 }
 
@@ -124,6 +140,10 @@ function adopt(e: Entry, s: StoredSheet) {
 export function change(id: string, ops: Op[], source: 'user' | 'vttl' = 'user') {
   const e = ws.entries[id];
   if (!e || !ops.length) return;
+  if (e.draft && source === 'user') {
+    e.draft = false;
+    e.needsCreate = true;
+  }
   const before = teamScore(e.view);
   for (const op of ops) setAt(e.view, op.p, op.v);
   const last = e.pending.at(-1);
@@ -140,8 +160,10 @@ export function change(id: string, ops: Op[], source: 'user' | 'vttl' = 'user') 
     const hh = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     change(id, [{ p: ['endHour'], v: hh }], 'vttl');
   }
-  // ScoreSheet LiveUpdateService: upload when the team score changes.
-  if (before.home !== after.home || before.away !== after.away) scheduleLive(id);
+  // VTTL wants results as soon as possible: a partial upload when the team score changes,
+  // and the full upload as soon as the result is complete.
+  if (after.complete) scheduleFull(id);
+  else if (before.home !== after.home || before.away !== after.away) scheduleLive(id);
 }
 
 function teamScore(s: Sheet) {
@@ -156,59 +178,51 @@ function teamScore(s: Sheet) {
 /** Shortcut for one field. */
 export const set = (id: string, p: Op['p'], v: unknown) => change(id, [{ p, v }]);
 
-// ---------------------------------------------------------------- open / close
+// ---------------------------------------------------------------- load matches
 
-/** Adds sheets (from the server, or new local ones) and opens them in this order. */
-export function openSheets(sheets: { stored?: StoredSheet; local?: Sheet }[], activate = true) {
-  for (const s of sheets) {
-    const id = s.stored?.id ?? s.local!.id;
-    if (!ws.entries[id]) {
-      const doc = s.stored?.doc ?? s.local!;
-      ws.entries[id] = { base: doc, rev: s.stored?.rev ?? 0, view: structuredClone(doc), pending: [], needsCreate: !s.stored };
-    }
-    if (!ws.open.includes(id)) ws.open.push(id);
+/** Puts a stored record from the server into the workspace (keeps local pending ops on top). */
+export function addStored(stored: StoredSheet) {
+  const e = ws.entries[stored.id];
+  if (!e) ws.entries[stored.id] = { base: stored.doc, rev: stored.rev, view: structuredClone(stored.doc), pending: [], needsCreate: false };
+  else if (stored.rev > e.rev || e.draft || e.needsCreate) adopt(e, stored);
+  persist();
+}
+
+/** The stored records of the club for one day (club night). Offline: keep what we have. */
+export async function loadDay(day: string) {
+  try {
+    for (const s of await api.sheetsOn(day)) addStored(s);
+  } catch (e) {
+    if (!(e instanceof OfflineError)) throw e;
   }
-  sortOpen();
-  if (activate && sheets.length) ws.active = sheets[0].stored?.id ?? sheets[0].local!.id;
-  persist();
+}
+
+/**
+ * Makes sure a match is in the workspace: the stored record from the server, or else a draft
+ * made from the VTTL calendar row. Then brings in what VTTL knows (players, results).
+ */
+export async function ensureMatch(row: MatchRow, season: number) {
+  const id = row.matchId;
+  if (!ws.entries[id] || ws.entries[id].draft) {
+    try {
+      addStored(await api.sheet(id));
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 404) && !(e instanceof OfflineError)) throw e;
+      if (!ws.entries[id]) {
+        if (!data.categories.length) await loadCategories().catch(() => {});
+        const doc = fromVttl(row, season, data.categories);
+        ws.entries[id] = { base: doc, rev: 0, view: structuredClone(doc), pending: [], needsCreate: false, draft: true };
+        persist();
+      }
+    }
+  }
   scheduleFlush(0);
-  for (const s of sheets) importFromVttl(s.stored?.id ?? s.local!.id).catch(() => {});
+  await importFromVttl(id).catch(() => {});
 }
 
-/** Tiles from best team to worst: A, B, C … (the letter of our own team), then by hour. */
-function sortOpen() {
-  const club = (session.me?.account.club ?? '').replace('-', '').toUpperCase();
-  const key = (id: string) => {
-    const s = ws.entries[id]?.view;
-    if (!s) return ['~', ''];
-    const ours = s.home.clubId.replace('-', '').toUpperCase() === club ? s.home.name : s.away.name;
-    const letter = ours.split(' ').at(-1) ?? '';
-    return [String(letter.length).padStart(2, '0') + letter, s.startHour];
-  };
-  ws.open.sort((a, b) => {
-    const [la, ha] = key(a);
-    const [lb, hb] = key(b);
-    return la.localeCompare(lb) || ha.localeCompare(hb);
-  });
-}
-
-export function close(id: string) {
-  ws.open = ws.open.filter((x) => x !== id);
-  if (ws.active === id) ws.active = ws.open[0] ?? 'overview';
-  const e = ws.entries[id];
-  // Keep unsent changes until they reach the server.
-  if (e && !e.pending.length && !e.needsCreate) delete ws.entries[id];
-  persist();
-}
-
-export function closeAll() {
-  for (const id of [...ws.open]) close(id);
-  ws.active = null;
-  persist();
-}
-
-export function activate(s: Screen) {
-  ws.active = s;
+export function setCurrent(id: string | null) {
+  if (ws.current === id) return;
+  ws.current = id;
   persist();
 }
 
@@ -235,6 +249,7 @@ export async function flush() {
   const refetch = new Set<string>();
   try {
     for (const [id, e] of Object.entries(ws.entries)) {
+      if (e.draft) continue;
       if (e.needsCreate) {
         const r = await api.createSheet($state.snapshot(e.base) as Sheet);
         e.needsCreate = false;
@@ -299,6 +314,7 @@ export async function refresh(id: string) {
     persist();
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
+      if (e.draft) return;
       e.needsCreate = true;
       scheduleFlush(0);
     } else throw err;
@@ -307,6 +323,7 @@ export async function refresh(id: string) {
 
 async function refreshAll() {
   for (const id of Object.keys(ws.entries)) {
+    if (ws.entries[id]?.draft) continue;
     try {
       await refresh(id);
     } catch {
@@ -345,8 +362,9 @@ export function connect() {
     }
     if (msg.type === 'ops') {
       const e = ws.entries[msg.id];
-      if (e) {
-        if (msg.rev === e.rev + 1) {
+      if (e?.draft) refresh(msg.id).catch(() => {});
+      else if (e) {
+        if (msg.rev === e.rev + 1 && !e.draft) {
           e.base = applyOps($state.snapshot(e.base) as Sheet, msg.ops);
           e.rev = msg.rev;
           recompute(e);
@@ -410,9 +428,9 @@ const isRecent = (day: string) => {
   return diff > -1 && diff < 2; // today or yesterday
 };
 
-/** ScoreSheet checks away matches every 5 minutes; we check every open sheet of today/yesterday. */
+/** ScoreSheet checks away matches every 5 minutes; we check every match of today/yesterday. */
 setInterval(() => {
-  for (const id of ws.open) {
+  for (const id of Object.keys(ws.entries)) {
     const s = ws.entries[id]?.view;
     if (s && isRecent(s.day)) importFromVttl(id).catch(() => {});
   }
@@ -439,20 +457,25 @@ export async function uploadSheet(id: string, partial = false): Promise<UploadRe
 
 const liveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const liveBusy = new Set<string>();
+/** Complete results that still wait for their full upload (offline, or busy). */
+const fullWaiting = new Set<string>();
+
+function canUpload(s: Sheet) {
+  const sys = getSystem(s.matchSystemId);
+  return s.isOfficial && sys.competitive && !s.vttlLocked;
+}
 
 function scheduleLive(id: string) {
   clearTimeout(liveTimers.get(id));
   liveTimers.set(id, setTimeout(() => liveUpload(id), 1500));
 }
 
-/** ScoreSheet LiveUpdateService rules. */
+/** ScoreSheet LiveUpdateService rules, always on. */
 async function liveUpload(id: string) {
-  const s = ws.entries[id]?.view;
-  if (!s || !session.online || settings.liveUpdates === 'off') return;
-  if (settings.liveUpdates === 'super' && s.level !== 'super') return;
-  const sys = getSystem(s.matchSystemId);
-  if (!s.isOfficial || !sys.competitive || s.disablePartialUpload || s.vttlLocked) return;
-  // A complete result is never sent as a live update: people would think it was the real upload.
+  const e = ws.entries[id];
+  const s = e?.view;
+  if (!s || e.draft || !session.online || !canUpload(s) || s.disablePartialUpload) return;
+  // A complete result is never sent as a live update: the full upload sends it.
   if (teamScore(s).complete) return;
   if (liveBusy.has(id)) return scheduleLive(id);
   liveBusy.add(id);
@@ -462,8 +485,44 @@ async function liveUpload(id: string) {
       ? `Tussenstand ${r.dryRun ? '(proef) ' : ''}naar VTTL gestuurd (${new Date().toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })})`
       : `Tussenstand naar VTTL mislukt: ${r.errors.join('; ')}`;
   } catch {
-    // Offline: ScoreSheet does not retry a live update either; the next score change sends it.
+    // Offline: the next score change sends it.
   } finally {
     liveBusy.delete(id);
   }
 }
+
+function scheduleFull(id: string) {
+  fullWaiting.add(id);
+  clearTimeout(liveTimers.get(id));
+  // A short wait: a captain often corrects the last score right after typing it.
+  liveTimers.set(id, setTimeout(() => fullUpload(id), 5000));
+}
+
+/** The full upload of a complete result, when it is valid. Retried when the device is online again. */
+async function fullUpload(id: string) {
+  const e = ws.entries[id];
+  const s = e?.view;
+  if (!s || e.draft || !canUpload(s) || !teamScore(s).complete) return void fullWaiting.delete(id);
+  if (vttlStatus(s, getSystem(s.matchSystemId)) === 'synced') return void fullWaiting.delete(id);
+  if (!session.online || liveBusy.has(id)) return;
+  const errors = validateSheet(s);
+  if (errors.length) {
+    fullWaiting.delete(id);
+    ws.message = `De uitslag is volledig, maar niet geüpload: ${errors.length} validatiefout(en). Kijk via het menu ⋯ › Valideren.`;
+    return;
+  }
+  liveBusy.add(id);
+  try {
+    const r = await uploadSheet(id, false);
+    fullWaiting.delete(id);
+    ws.message = r.ok ? `Volledige uitslag ${r.dryRun ? '(proef) ' : ''}naar VTTL gestuurd` : `Upload naar VTTL mislukt: ${r.errors.join('; ')}`;
+  } catch {
+    // Offline: retried on the next "online" event.
+  } finally {
+    liveBusy.delete(id);
+  }
+}
+
+addEventListener('online', () => {
+  for (const id of fullWaiting) setTimeout(() => fullUpload(id), 2000);
+});

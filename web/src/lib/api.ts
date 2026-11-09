@@ -7,6 +7,16 @@
 import type { Me, Member, ClubInfo, MatchList, TeamMatch, PlayerCategory, MatchSystem, Season, Club } from './types';
 import type { Sheet } from './sheet/types';
 import type { Op } from './sheet/ops';
+import type { Device, BoardState } from './boards.svelte';
+
+export interface BoardLink {
+  device: string;
+  sheet: string;
+  game: number;
+  bestOf: number;
+  player1: { first: string; last: string };
+  player2: { first: string; last: string };
+}
 
 export interface StoredSheet {
   id: string;
@@ -104,6 +114,10 @@ export const api = {
     request<{ sheet: StoredSheet; created: boolean }>('PUT', '/api/sheet', { id: doc.id, day: doc.day, season: doc.season, doc }),
   upload: (id: string, data: string, partial: boolean) =>
     request<{ ok: boolean; dryRun: boolean; errors: string[] }>('POST', '/api/upload', { id, data, partial }),
+  devices: () => request<Device[]>('GET', '/api/devices'),
+  saveDevice: (id: string, alias: string) => request<void>('PUT', '/api/devices', { id, alias }),
+  deleteDevice: (id: string) => request<void>('DELETE', `/api/devices?id=${encodeURIComponent(id)}`),
+  linkBoard: (b: BoardLink) => request<BoardState>('POST', '/api/boards/link', b),
   sheetOps: (id: string, clientId: string, seq: number, ops: Op[]) =>
     request<{ rev: number; seq: number }>('POST', '/api/sheet/ops', { id, clientId, seq, ops }),
 };

@@ -1,10 +1,12 @@
 <script lang="ts">
   import { session, loadMe } from './lib/session.svelte';
   import { route, navigate } from './lib/router.svelte';
+  import { applyTheme } from './lib/settings.svelte';
   import Login from './pages/Login.svelte';
   import WhoAmI from './pages/WhoAmI.svelte';
-  import Workspace from './pages/Workspace.svelte';
+  import Shell from './pages/Shell.svelte';
 
+  applyTheme();
   loadMe();
 
   const needsMember = $derived(!!session.me && !session.me.account.member);
@@ -31,5 +33,5 @@
 {:else if needsMember || route.path === '/ik'}
   <WhoAmI />
 {:else}
-  <Workspace />
+  <Shell />
 {/if}

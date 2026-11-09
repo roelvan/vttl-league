@@ -3,7 +3,7 @@
 </script>
 
 <p class="credits">
-  Een webappkloon van het programma
+  Interclub Live volgt en scoort VTTL-ploegenwedstrijden live. De regels komen uit
   <a href="https://score.pieterp.be/" target="_blank" rel="noopener">ScoreSheet</a> van PieterP.be.
   {#if long}
     De regels voor de scores, de matchsystemen en de validaties komen uit de broncode van ScoreSheet

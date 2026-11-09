@@ -90,6 +90,11 @@ export interface Sheet {
   awayCaptain: Person;
   roomCommissioner: Person;
 
+  /** Live follow: the line-up is done and the evening has started ("Start de avond"). */
+  started?: boolean;
+  /** The tables in play, in order. Games go out in fixed pairs: game i is on table i % length. */
+  tables?: TableSetup[];
+
   /** Set after the first full upload; live partial uploads stop then. */
   disablePartialUpload?: boolean;
 
@@ -99,6 +104,13 @@ export interface Sheet {
   vttlLocked?: boolean;
   /** The last upload (or dry run) of this sheet. */
   upload?: UploadInfo;
+}
+
+export interface TableSetup {
+  /** Table number in the hall, as typed. */
+  no: string;
+  /** Scoreboard device id on this table, or null for manual entry. */
+  device: string | null;
 }
 
 export interface UploadInfo {

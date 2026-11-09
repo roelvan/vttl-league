@@ -2,7 +2,7 @@
 // behind the hall's captive portal (which answers every page with its own login page).
 // The API is never cached here: the app keeps its own data in local storage.
 
-const CACHE = 'vl-shell-v1';
+const CACHE = 'vl-shell-v2';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

@@ -1,9 +1,9 @@
 {
-  "name": "VTTL League",
-  "short_name": "VTTL League",
+  "name": "Interclub Live",
+  "short_name": "Interclub",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f0f0f0",
-  "theme_color": "#025a41",
+  "background_color": "#0a1020",
+  "theme_color": "#0a1020",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }

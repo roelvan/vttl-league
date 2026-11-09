@@ -1,0 +1,191 @@
+<script lang="ts">
+  import TopBar from '../components/TopBar.svelte';
+  import BottomNav from '../components/BottomNav.svelte';
+  import ClubNight from '../components/ClubNight.svelte';
+  import Toast from '../components/Toast.svelte';
+  import Credits from '../components/Credits.svelte';
+  import MatchPage from './MatchPage.svelte';
+  import LineUpPage from './LineUpPage.svelte';
+  import SettingsPage from './SettingsPage.svelte';
+  import Dialog from '../dialogs/Dialog.svelte';
+  import PrintDialog from '../dialogs/PrintDialog.svelte';
+  import UploadDialog from '../dialogs/UploadDialog.svelte';
+  import PrintSheet from '../components/print/PrintSheet.svelte';
+  import RefereeSlips from '../components/print/RefereeSlips.svelte';
+  import { route, match } from '../lib/router.svelte';
+  import { matchIdFromSlug, urls, type MenuAction } from '../lib/nav';
+  import { data, loadCategories, loadClubs, loadMatches } from '../lib/data.svelte';
+  import { ws, connect, scheduleFlush, ensureMatch, setCurrent, onServerEvent, uploadSheet } from '../lib/workspace.svelte';
+  import { onBoardMessage, loadDevices } from '../lib/boards.svelte';
+  import { session } from '../lib/session.svelte';
+  import { canEdit } from '../lib/access';
+  import { validateSheet } from '../lib/validation';
+  import { settings } from '../lib/settings.svelte';
+  import { getSystem } from '../lib/sheet/systems';
+  import { vttlStatus } from '../lib/sheet/vttl';
+  import { shortDate, todayIso } from '../lib/format';
+  import type { PrintJob } from '../lib/sheet/print';
+  import { tick } from 'svelte';
+
+  // Reference data in the background; the cached copies are used meanwhile.
+  loadCategories().catch(() => {});
+  loadClubs().catch(() => {});
+  loadMatches().catch(() => {});
+  loadDevices().catch(() => {});
+  connect();
+  scheduleFlush(0);
+  onServerEvent((msg) => {
+    if (msg.type === 'board') onBoardMessage(msg as never);
+  });
+
+  // ---------------------------------------------------------------- route
+  const m = $derived.by(() => {
+    const p = route.path;
+    let r: Record<string, string> | null;
+    if ((r = match('/wedstrijd/:id/opstelling', p))) return { section: 'lineup' as const, id: matchIdFromSlug(r.id), day: null };
+    if ((r = match('/wedstrijd/:id', p))) return { section: 'match' as const, id: matchIdFromSlug(r.id), day: null };
+    if ((r = match('/dag/:day', p)) && /^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { section: 'night' as const, id: null, day: r.day };
+    if (p === '/instellingen') return { section: 'other' as const, id: null, day: null };
+    return { section: 'night' as const, id: null, day: todayIso() };
+  });
+
+  const rows = $derived(data.matches?.matches ?? []);
+  const row = $derived(m.id ? (rows.find((x) => x.matchId === m.id) ?? null) : null);
+  const sheet = $derived(m.id ? ws.entries[m.id]?.view : undefined);
+  /** The match the nav items point to: the one on screen, else the last one shown. */
+  const navMatch = $derived(m.id ?? ws.current);
+  const day = $derived(m.day ?? row?.date ?? sheet?.day ?? (ws.current ? ws.entries[ws.current]?.view.day : null) ?? todayIso());
+
+  $effect(() => {
+    const id = m.id;
+    if (!id) return;
+    setCurrent(id);
+    if (row && data.matches) ensureMatch(row, data.matches.season).catch((e) => (ws.message = `Laden mislukt: ${e.message}`));
+  });
+
+  $effect(() => {
+    m.section;
+    m.id;
+    window.scrollTo(0, 0);
+  });
+
+  // ---------------------------------------------------------------- menu actions
+  type DialogState = { kind: 'print'; what: 'sheet' | 'slips' } | { kind: 'upload' } | { kind: 'validate'; errors: string[] } | { kind: 'about' } | null;
+  let dialog = $state<DialogState>(null);
+  let printJob = $state<PrintJob | null>(null);
+
+  const ourMatch = $derived(!!sheet && canEdit(sheet) && (row?.isHome ?? true));
+
+  async function onaction(a: MenuAction) {
+    if (a === 'about') dialog = { kind: 'about' };
+    else if (a === 'share') {
+      const url = `${location.origin}${m.id ? urls.match(m.id) : urls.day(day)}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        ws.message = 'Publieke link gekopieerd. Iedereen met de link kan de wedstrijd live volgen.';
+      } catch {
+        prompt('Kopieer de link:', url);
+      }
+    } else if (!sheet) return;
+    else if (a === 'print') dialog = { kind: 'print', what: 'sheet' };
+    else if (a === 'slips') dialog = { kind: 'print', what: 'slips' };
+    else if (a === 'upload') dialog = { kind: 'upload' };
+    else if (a === 'validate') dialog = { kind: 'validate', errors: validateSheet(sheet) };
+  }
+
+  async function doPrint(job: PrintJob) {
+    dialog = null;
+    printJob = job;
+    await tick();
+    const page = document.getElementById('page-size') ?? document.head.appendChild(Object.assign(document.createElement('style'), { id: 'page-size' }));
+    page.textContent = `@page { size: A4 ${job.what === 'sheet' ? 'landscape' : 'portrait'}; margin: 0; }`;
+    addEventListener(
+      'afterprint',
+      () => {
+        printJob = null;
+        if (job.what === 'sheet') autoUpload(job.id);
+      },
+      { once: true },
+    );
+    window.print();
+  }
+
+  /** ScoreSheet: after printing, a valid official sheet is uploaded automatically. */
+  async function autoUpload(id: string) {
+    const s = ws.entries[id]?.view;
+    if (!settings.autoUpload || !s || !s.isOfficial || s.vttlLocked || !getSystem(s.matchSystemId).competitive) return;
+    if (vttlStatus(s, getSystem(s.matchSystemId)) === 'synced' || validateSheet(s).length) return;
+    try {
+      const r = await uploadSheet(id, false);
+      ws.message = r.ok ? `Uitslag ${r.dryRun ? '(proef) ' : ''}naar VTTL gestuurd na het afdrukken` : `Upload mislukt: ${r.errors.join('; ')}`;
+    } catch (e) {
+      ws.message = `Upload na afdrukken mislukt: ${e instanceof Error ? e.message : e}`;
+    }
+  }
+</script>
+
+<TopBar
+  section={m.section}
+  matchId={navMatch}
+  datechip={row ? `${shortDate(row.date)}${row.week ? ` · week ${row.week}` : ''}` : ''}
+  {onaction}
+  matchActions={ourMatch}
+/>
+
+<div class="shell" class:single={m.section === 'other'}>
+  {#if m.section !== 'other'}
+    <aside class="side-night" aria-label="Clubavond">
+      <ClubNight {day} currentId={m.id} filters={false} />
+    </aside>
+  {/if}
+
+  <main class="view">
+    {#if m.section === 'night'}
+      <div class="view-night-only view"><ClubNight {day} currentId={ws.current} /></div>
+      <div class="card empty hide-mobile">
+        <h2>Kies een wedstrijd</h2>
+        <p>Kies links een wedstrijd van de clubavond om ze live te volgen.</p>
+      </div>
+    {:else if m.section === 'match' && m.id}
+      {#key m.id}<MatchPage matchId={m.id} {row} />{/key}
+    {:else if m.section === 'lineup' && m.id}
+      {#key m.id}<LineUpPage matchId={m.id} {row} />{/key}
+    {:else}
+      <SettingsPage />
+    {/if}
+  </main>
+</div>
+
+<BottomNav section={m.section} matchId={navMatch} {day} />
+<Toast />
+
+{#if dialog?.kind === 'print' && m.id}
+  <PrintDialog id={m.id} what={dialog.what} onclose={() => (dialog = null)} onprint={doPrint} />
+{:else if dialog?.kind === 'upload' && m.id}
+  <UploadDialog id={m.id} onclose={() => (dialog = null)} />
+{:else if dialog?.kind === 'validate'}
+  <Dialog title="Valideren" onclose={() => (dialog = null)}>
+    {#if dialog.errors.length}
+      <p style="margin:0">De app vond deze validatiefouten:</p>
+      <ul class="errors">{#each dialog.errors as e (e)}<li>{e}</li>{/each}</ul>
+    {:else}
+      <p style="margin:0" class="ok">Geen validatiefouten gevonden.</p>
+    {/if}
+    {#snippet footer()}<button class="btn big" type="button" onclick={() => (dialog = null)}>OK</button>{/snippet}
+  </Dialog>
+{:else if dialog?.kind === 'about'}
+  <Dialog title="Over Interclub Live" onclose={() => (dialog = null)}>
+    <Credits long />
+    {#if session.me && !session.me.uploadEnabled}
+      <p class="hint">Proefmodus: de server stuurt nog niets echt naar VTTL.</p>
+    {/if}
+    {#snippet footer()}<button class="btn big" type="button" onclick={() => (dialog = null)}>OK</button>{/snippet}
+  </Dialog>
+{/if}
+
+<div id="print-root">
+  {#if printJob && ws.entries[printJob.id]}
+    {#if printJob.what === 'sheet'}<PrintSheet sheet={ws.entries[printJob.id].view} />
+    {:else}<RefereeSlips sheet={ws.entries[printJob.id].view} layout={printJob.layout} />{/if}
+  {/if}
+</div>

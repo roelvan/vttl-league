@@ -1,5 +1,5 @@
 <script lang="ts">
-  // ScoreSheet's Print wizard: the match sheet or the referee slips, with a preview.
+  // Print the VTTL match sheet or the referee slips, with a preview.
   import Dialog from './Dialog.svelte';
   import PrintSheet from '../components/print/PrintSheet.svelte';
   import RefereeSlips from '../components/print/RefereeSlips.svelte';
@@ -8,41 +8,46 @@
   import { validateSheet } from '../lib/validation';
   import { settings, saveSettings } from '../lib/settings.svelte';
 
-  let { id, onclose, onprint }: { id: string; onclose: () => void; onprint: (job: PrintJob) => void } = $props();
+  let { id, what, onclose, onprint }: { id: string; what: 'sheet' | 'slips'; onclose: () => void; onprint: (job: PrintJob) => void } = $props();
 
   const sheet = $derived(ws.entries[id]?.view);
-  let what = $state<'sheet' | 'slips'>('sheet');
   const errors = $derived(sheet && what === 'sheet' ? validateSheet(sheet) : []);
+  let confirmErrors = $state(false);
 
   function go() {
     // ScoreSheet validates before it prints the match sheet.
-    if (errors.length && !confirm(`De wedstrijd die u wil afdrukken bevat validatiefouten:\n\n${errors.join('\n')}\n\nWeet u zeker dat u de wedstrijd wil afdrukken?`)) return;
+    if (errors.length && !confirmErrors) {
+      confirmErrors = true;
+      return;
+    }
     onprint({ id, what, layout: settings.slipLayout });
   }
 </script>
 
-<Dialog title="Afdrukken – {sheet?.home.name} – {sheet?.away.name}" {onclose} wide>
-  <p class="muted">Selecteer wat u van de geselecteerde wedstrijd wil afdrukken:</p>
-  <div class="pr-opts">
-    <label class="check"><input type="radio" bind:group={what} value="sheet" /> Wedstrijdblad</label>
-    <label class="check"><input type="radio" bind:group={what} value="slips" /> Scheidsrechterblaadjes</label>
-    {#if what === 'slips'}
+<Dialog title={what === 'sheet' ? 'Wedstrijdblad afdrukken' : 'Scheidsrechterblaadjes'} chip={sheet?.matchId} {onclose} wide>
+  {#if what === 'slips'}
+    <label class="field">Schikking
       <select bind:value={settings.slipLayout} onchange={saveSettings}>
         {#each SLIP_LAYOUTS as [v, l] (v)}<option value={v}>{l}</option>{/each}
       </select>
-    {/if}
-  </div>
+    </label>
+  {:else}
+    <label class="check"><input type="checkbox" bind:checked={settings.autoUpload} onchange={saveSettings} /> Na het afdrukken de uitslag naar VTTL sturen (als ze geldig is)</label>
+  {/if}
   {#if errors.length}
-    <details class="pr-errors"><summary>{errors.length} validatiefout(en)</summary><ul class="errors">{#each errors as e (e)}<li>{e}</li>{/each}</ul></details>
+    <details class="banner warn" open={confirmErrors}>
+      <summary>{errors.length} validatiefout(en){confirmErrors ? ': klik opnieuw op Afdrukken om toch af te drukken' : ''}</summary>
+      <ul class="errors">{#each errors as e (e)}<li>{e}</li>{/each}</ul>
+    </details>
   {/if}
   <div class="preview" class:portrait={what === 'slips'}>
     {#if sheet}
       {#if what === 'sheet'}<PrintSheet {sheet} />{:else}<RefereeSlips {sheet} layout={settings.slipLayout} />{/if}
     {/if}
   </div>
-  <p class="muted small">Kies "Opslaan als PDF" in het afdrukvenster van de browser voor een PDF.</p>
+  <p class="hint" style="margin:0">Kies "Opslaan als PDF" in het afdrukvenster voor een PDF.</p>
   {#snippet footer()}
-    <button class="ghost" onclick={onclose}>Annuleren</button>
-    <button onclick={go}>Afdrukken</button>
+    <button class="btn ghost" type="button" onclick={onclose}>Annuleren</button>
+    <button class="btn" type="button" onclick={go}>{confirmErrors ? 'Toch afdrukken' : 'Afdrukken'}</button>
   {/snippet}
 </Dialog>

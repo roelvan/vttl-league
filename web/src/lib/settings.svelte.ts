@@ -1,23 +1,16 @@
-// Per-device preferences (like the ScoreSheet settings window), kept in local storage.
+// Per-device preferences, kept in local storage.
+
+import type { SlipLayout } from './sheet/print';
 
 interface Settings {
-  /** "Officiële velden onveranderbaar maken" */
-  protectMatchInfo: boolean;
-  /** Show the team score on the navigation tiles. */
-  showResultsInNav: boolean;
-  /** Also open away matches for a new match day. */
-  openAway: boolean;
-  /** Also open byes of that week. */
-  openByes: boolean;
-  zoom: number;
-  /** Live partial uploads to VTTL while the match is played (ScoreSheet: on). */
-  liveUpdates: 'on' | 'super' | 'off';
-  /** ScoreSheet "auto-upload": upload a valid sheet after printing it. */
+  /** Dark is the default (design); the sun button switches. */
+  theme: 'dark' | 'light';
+  slipLayout: SlipLayout;
+  /** ScoreSheet "auto-upload": upload a valid result after printing the sheet. */
   autoUpload: boolean;
-  slipLayout: '2x4' | '1x8' | 'table';
 }
 
-const defaults: Settings = { protectMatchInfo: true, showResultsInNav: true, openAway: false, openByes: false, zoom: 1, liveUpdates: 'on', autoUpload: true, slipLayout: '2x4' };
+const defaults: Settings = { theme: 'dark', slipLayout: '2x4', autoUpload: true };
 
 function load(): Settings {
   try {
@@ -33,4 +26,15 @@ export function saveSettings() {
   try {
     localStorage.setItem('vl.settings', JSON.stringify(settings));
   } catch {}
+}
+
+export function applyTheme() {
+  document.documentElement.dataset.theme = settings.theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', settings.theme === 'dark' ? '#0a1020' : '#f1f4f9');
+}
+
+export function toggleTheme() {
+  settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
+  saveSettings();
+  applyTheme();
 }
