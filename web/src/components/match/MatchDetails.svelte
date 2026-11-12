@@ -6,6 +6,8 @@
   import Icon from '../Icon.svelte';
   import type { MenuAction } from '../../lib/nav';
   import { deviceAlias } from '../../lib/boards.svelte';
+  import { publicClub } from '../../lib/viewer.svelte';
+  import UploadLog from './UploadLog.svelte';
 
   let {
     sheet,
@@ -24,6 +26,9 @@
   const upload = $derived(sheet.upload);
   const when = (t: number) => new Date(t).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
   const person = (p: { name: string }) => p.name || '–';
+  const check = $derived(
+    !upload || upload.dryRun ? '' : upload.confirmed === true ? ' · bevestigd door VTTL' : upload.confirmed === false ? ' · VTTL toont andere gegevens' : upload.ok ? ' · niet gecontroleerd' : '',
+  );
 </script>
 
 <section class="card" aria-label="Wedstrijdgegevens">
@@ -44,12 +49,13 @@
       {/if}
       {#if upload}
         <dt>Laatste upload</dt>
-        <dd class:error={!upload.ok}>
-          {when(upload.at)} · {upload.partial ? 'tussenstand' : 'volledig'}{upload.dryRun ? ' (proef)' : ''}{upload.ok ? '' : ' · mislukt'}
+        <dd class:error={!upload.ok || upload.confirmed === false}>
+          {when(upload.at)} · {upload.partial ? 'tussenstand' : 'volledig'}{upload.dryRun ? ' (proef)' : ''}{upload.ok ? '' : ' · mislukt'}{check}
         </dd>
       {/if}
     </dl>
     {#if sheet.comments}<p class="hint">{sheet.comments}</p>{/if}
+    {#if sheet.isOfficial && !publicClub()}<UploadLog id={sheet.id} />{/if}
     {#if onaction}
       <div class="detail-actions">
         <button class="btn ghost" type="button" onclick={() => onaction('print')}><Icon name="print" size={16} />Wedstrijdblad</button>

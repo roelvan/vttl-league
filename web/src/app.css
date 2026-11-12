@@ -474,6 +474,12 @@ li.row-btn input.grow { min-width: 140px; }
 .up { width: 100%; border-collapse: collapse; font-size: 15px; }
 .up th, .up td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
 pre.mono { white-space: pre-wrap; word-break: break-all; }
+.vttl-log { margin-top: 14px; font-size: 14px; }
+.vttl-log > summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+.log-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 12px; }
+.log-item { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; }
+.log-item .vttl-icon { margin-top: 2px; }
+.log-item div { overflow-wrap: anywhere; }
 .up pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; margin: 4px 0 0; }
 .vttl-icon {
   display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;

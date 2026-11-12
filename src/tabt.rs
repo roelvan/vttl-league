@@ -455,8 +455,7 @@ impl Tabt {
         Ok(r.children("TeamMatchesEntries").map(team_match).collect())
     }
 
-    /// One match. `fresh` skips the cache (right before an upload, and for live tracking).
-    #[allow(dead_code)]
+    /// One match. `fresh` skips the cache (the read-back after an upload).
     pub async fn team_match(&self, c: &Creds, season: i64, club: &str, match_id: &str, fresh: bool) -> Result<Option<TeamMatch>> {
         let r = self
             .call(

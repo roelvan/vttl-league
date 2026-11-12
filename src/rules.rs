@@ -87,8 +87,6 @@ pub struct Sheet {
     pub vttl_locked: bool,
     #[serde(default, deserialize_with = "nd")]
     pub disable_partial_upload: bool,
-    #[serde(default, deserialize_with = "nd")]
-    pub vttl_seen: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

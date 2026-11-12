@@ -25,6 +25,29 @@ export interface StoredSheet {
   doc: Sheet;
 }
 
+/** The result of an upload (src/uploader.rs `Outcome`). */
+export interface UploadOutcome {
+  ok: boolean;
+  dryRun: boolean;
+  partial: boolean;
+  errors: string[];
+  data: string;
+  /** Read back from VTTL: true = VTTL holds it, false = VTTL differs, null = not checked. */
+  confirmed?: boolean | null;
+  diff?: string[];
+  checkError?: string | null;
+}
+
+/** One row of the VTTL log of a match (src/uploader.rs `LogEntry`). */
+export interface UploadLogEntry extends UploadOutcome {
+  at: number;
+  account: string;
+  /** "auto" (after a change), "manual" (upload button) or "retry" (retry queue). */
+  source: string;
+  confirmed: boolean | null;
+  diff: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -111,7 +134,8 @@ export const api = {
   sheet: (id: string) => request<StoredSheet>('GET', `/api/sheet?id=${encodeURIComponent(id)}`),
   createSheet: (doc: Sheet) =>
     request<{ sheet: StoredSheet; created: boolean }>('PUT', '/api/sheet', { id: doc.id, day: doc.day, season: doc.season, doc }),
-  upload: (id: string) => request<{ ok: boolean; dryRun: boolean; partial: boolean; errors: string[]; data: string }>('POST', '/api/upload', { id }),
+  upload: (id: string) => request<UploadOutcome>('POST', '/api/upload', { id }),
+  uploadLog: (id: string) => request<UploadLogEntry[]>('GET', `/api/uploads?id=${encodeURIComponent(id)}`),
   devices: () => request<Device[]>('GET', '/api/devices'),
   saveDevice: (id: string, alias: string) => request<void>('PUT', '/api/devices', { id, alias }),
   deleteDevice: (id: string) => request<void>('DELETE', `/api/devices?id=${encodeURIComponent(id)}`),

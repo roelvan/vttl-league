@@ -12,14 +12,14 @@
 // ignores a batch it has already applied. Ops only "set" a value, so applying one twice is
 // harmless; the last write wins per field.
 
-import { api, ApiError, OfflineError, type StoredSheet } from './api';
+import { api, ApiError, OfflineError, type StoredSheet, type UploadOutcome } from './api';
 import { applyOps, setAt, type Op } from './sheet/ops';
 import type { Sheet } from './sheet/types';
 import { getSystem } from './sheet/systems';
 import { computeScore, isByeClub } from './sheet/score';
 import { session } from './session.svelte';
 import { publicClub } from './viewer.svelte';
-import { importOps } from './sheet/vttl';
+import { importOps, keyLabel } from './sheet/vttl';
 import { data, loadMembers, loadCategories, defaultCategory, clubName, memberKey } from './data.svelte';
 import { fromVttl } from './sheet/create';
 import type { Member, MatchRow } from './types';
@@ -386,8 +386,7 @@ export function connect() {
         } else if (msg.rev > e.rev) refresh(msg.id).catch(() => {});
       }
     } else if (msg.type === 'upload' && !publicClub()) {
-      const what = msg.partial ? 'Tussenstand' : 'Uitslag';
-      ws.message = msg.ok ? `${what} ${msg.dryRun ? '(proef) ' : ''}naar VTTL gestuurd` : `Upload naar VTTL mislukt: ${(msg.errors ?? []).join('; ')}`;
+      ws.message = uploadMessage(msg as unknown as UploadOutcome);
     } else if (msg.type === 'resync') {
       refreshAll();
     }
@@ -461,12 +460,16 @@ setInterval(() => {
 // The server uploads by itself after every stored change (src/uploader.rs). This is the manual
 // upload: first send our waiting changes, so the server uploads what this screen shows.
 
-export interface UploadResult {
-  ok: boolean;
-  dryRun: boolean;
-  partial: boolean;
-  errors: string[];
-  data: string;
+export type UploadResult = UploadOutcome;
+
+/** One line about an upload and its read-back from VTTL. */
+export function uploadMessage(o: UploadOutcome): string {
+  const what = o.partial ? 'Tussenstand' : 'Uitslag';
+  if (o.dryRun) return `${what} (proef) klaar, niets naar VTTL gestuurd`;
+  if (o.confirmed === true) return `${what} staat op VTTL (gecontroleerd)`;
+  if (o.confirmed === false) return `${what} gestuurd, maar VTTL toont andere gegevens: ${(o.diff ?? []).map(keyLabel).join(', ')}. De server probeert opnieuw.`;
+  if (!o.ok) return `Upload naar VTTL mislukt: ${(o.errors ?? []).join('; ')}. De server probeert opnieuw.`;
+  return `${what} naar VTTL gestuurd, nog niet gecontroleerd. De server probeert opnieuw.`;
 }
 
 export async function uploadSheet(id: string): Promise<UploadResult> {

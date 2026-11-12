@@ -90,6 +90,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/sheet/ops", post(sheets::ops))
         .route("/api/ws", get(sheets::ws))
         .route("/api/upload", post(upload))
+        .route("/api/uploads", get(upload_log))
         .route("/api/devices", get(boards::list_devices).put(boards::save_device).delete(boards::delete_device))
         .route("/api/boards", get(boards::states))
         .route("/api/boards/link", post(boards::link))
@@ -442,12 +443,22 @@ struct UploadBody {
 /// (src/uploader.rs); this one tries the login of the user first and sends even when nothing changed.
 async fn upload(State(app): State<Arc<App>>, u: User, Json(b): Json<UploadBody>) -> R<Value> {
     let club = u.club()?.to_string();
-    let o = crate::uploader::upload(&app, &club, &b.id, true, Some(u.creds.clone())).await?;
+    let o = crate::uploader::upload(&app, &club, &b.id, crate::uploader::Source::Manual, Some(u.creds.clone())).await?;
     Ok(Json(match o {
         Some(o) => json!(o),
         None => json!({ "ok": false, "dryRun": !app.upload_enabled, "partial": false, "data": "",
             "errors": ["Er is niets te uploaden: geen officiële competitiewedstrijd, al gevalideerd, of er loopt al een upload."] }),
     }))
+}
+
+#[derive(Deserialize)]
+struct LogQuery {
+    id: String,
+}
+
+/// The VTTL log of one match: every upload attempt, newest first.
+async fn upload_log(State(app): State<Arc<App>>, u: User, Query(q): Query<LogQuery>) -> R<Vec<crate::uploader::LogEntry>> {
+    Ok(Json(app.db.upload_log(u.club()?, &q.id)?))
 }
 
 /// "ROEL" -> "Roel", "JEAN-PIERRE" -> "Jean-Pierre".

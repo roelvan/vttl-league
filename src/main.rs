@@ -53,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(eventloop) = mqtt {
         tokio::spawn(boards::run(app.clone(), eventloop));
     }
+    tokio::spawn(uploader::run(app.clone()));
     if app.upload_enabled {
         tracing::warn!("UPLOAD_ENABLED=true: uploads change the LIVE VTTL database");
     }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getSystem } from './systems';
 import { applyOps } from './ops';
-import { boxesFromNotation, canonical, importOps, uploadOps, vttlStatus, type Lookup } from './vttl';
+import { boxesFromNotation, canonical, fromVttl, importOps, keyLabel, vttlStatus, type Lookup } from './vttl';
 import { fromVttl as sheetFromRow } from './create';
 import type { MatchRow, TeamMatch, Member } from '../types';
 
@@ -58,16 +58,32 @@ describe('VTTL sync', () => {
     expect(s3.results[0][0]).toEqual({ l: '5', r: '11' });
     expect(s3.results[0][3]).toEqual({ l: '', r: '' });
   });
-  it('after a real upload the sheet is synced, after a dry run it is not', () => {
+  it('only an upload that VTTL confirms makes the sheet synced', () => {
     const s0 = sheetFromRow(row, 27, []);
     const s1 = applyOps(s0, [0, 1, 2].map((b) => ({ p: ['results', 0, b], v: { l: '11', r: '3' } })));
     expect(vttlStatus(s1, men)).toBe('pending');
-    const dry = applyOps(s1, uploadOps(s1, men, { at: 0, by: 'x', ok: true, partial: true, dryRun: true, errors: [] }));
+    // The ops the server writes (src/uploader.rs `record_ops`).
+    const info = { at: 0, by: 'x', ok: true, partial: true, dryRun: false, errors: [] };
+    const dry = applyOps(s1, [{ p: ['upload'], v: { ...info, dryRun: true } }]);
     expect(vttlStatus(dry, men)).toBe('pending');
-    const real = applyOps(s1, uploadOps(s1, men, { at: 0, by: 'x', ok: true, partial: true, dryRun: false, errors: [] }));
+    // Accepted, but the read-back failed: not on VTTL as far as we know.
+    const unchecked = applyOps(s1, [{ p: ['upload'], v: { ...info, confirmed: null, checkError: 'timeout' } }]);
+    expect(vttlStatus(unchecked, men)).toBe('pending');
+    const held = canonical(s1, men);
+    const real = applyOps(s1, [{ p: ['upload'], v: { ...info, confirmed: true } }, { p: ['vttlSeen'], v: held }]);
     expect(vttlStatus(real, men)).toBe('synced');
-    const failed = applyOps(s1, uploadOps(s1, men, { at: 0, by: 'x', ok: false, partial: false, dryRun: false, errors: ['22'] }));
+    // VTTL answered OK but does not hold game 1: vttlSeen is what VTTL really holds.
+    const onVttl = vttlMatch([]);
+    const seen = { ...Object.fromEntries(Object.keys(held).map((k) => [k, ''])), ...fromVttl(onVttl, men) };
+    const other = applyOps(s1, [{ p: ['upload'], v: { ...info, confirmed: false, diff: ['g.0'] } }, { p: ['vttlSeen'], v: seen }]);
+    expect(vttlStatus(other, men)).toBe('error');
+    // The browser import then does not overwrite the local score with the old VTTL value.
+    expect(importOps(other, men, onVttl, look)).toEqual([]);
+    const failed = applyOps(s1, [{ p: ['upload'], v: { ...info, ok: false, partial: false, errors: ['22'] } }]);
     expect(vttlStatus(failed, men)).toBe('error');
+  });
+  it('names the fields that differ', () => {
+    expect(['g.3', 'home.p.0', 'away.cap', 'ref'].map(keyLabel)).toEqual(['wedstrijd 4', 'speler 1 thuis', 'kapitein bezoekers', 'scheidsrechter']);
   });
   it('validated on VTTL makes the sheet read-only', () => {
     const s0 = sheetFromRow(row, 27, []);

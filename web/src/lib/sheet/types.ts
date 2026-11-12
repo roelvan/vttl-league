@@ -133,6 +133,13 @@ export interface UploadInfo {
   partial: boolean;
   dryRun: boolean;
   errors: string[];
+  /** Read back from VTTL: true = VTTL holds what was sent, false = VTTL differs (see `diff`),
+   *  null/absent = not checked (dry run, refused, or the read-back failed). */
+  confirmed?: boolean | null;
+  /** Canonical keys where VTTL differs (sheet/vttl.ts `keyLabel`). */
+  diff?: string[];
+  /** Why the read-back failed. */
+  checkError?: string | null;
 }
 
 export const emptyPlayer = (): SheetPlayer => ({ name: '', computerNumber: '', position: '', index: '', ranking: '', captain: false });

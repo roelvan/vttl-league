@@ -3,7 +3,7 @@
   // (partial after each game, full when complete); this is for a retry or a correction.
   import Dialog from './Dialog.svelte';
   import VttlIcon from '../components/VttlIcon.svelte';
-  import { ws, uploadSheet, type UploadResult } from '../lib/workspace.svelte';
+  import { ws, uploadSheet, uploadMessage, type UploadResult } from '../lib/workspace.svelte';
   import { session } from '../lib/session.svelte';
   import { getSystem } from '../lib/sheet/systems';
   import { computeScore } from '../lib/sheet/score';
@@ -61,10 +61,9 @@
     {/if}
     {#if result}
       {#if 'error' in result}<p class="error">{result.error}</p>
-      {:else if !result.ok}<p class="error">{result.errors.join('; ')}</p>
       {:else}
-        <p class="ok">{result.dryRun ? 'Proefupload OK' : 'Geüpload'}</p>
-        <details><summary class="muted">Uploadlijn</summary><pre class="mono">{result.data}</pre></details>
+        <p class={result.dryRun || result.confirmed ? 'ok' : 'error'}>{uploadMessage(result)}</p>
+        {#if result.data}<details><summary class="muted">Uploadlijn</summary><pre class="mono">{result.data}</pre></details>{/if}
       {/if}
     {/if}
   {/if}

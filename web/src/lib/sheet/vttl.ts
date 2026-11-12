@@ -6,13 +6,14 @@
 //
 // - Import: a VTTL value wins when it is new or changed since the last import (`vttlSeen`).
 //   An unchanged VTTL value never overwrites a newer local edit, and an empty one never erases.
-// - After a real upload, `vttlSeen` becomes what we sent: VTTL now holds it.
+// - After a real upload the server reads the match back from VTTL (src/uploader.rs): `vttlSeen`
+//   becomes what VTTL really holds, and `upload.confirmed` tells if that is what we sent.
 // - Status: the sheet is "synced" when its canonical map equals `vttlSeen`.
 
 import type { Member, TeamMatch } from '../types';
 import type { Op } from './ops';
 import type { MatchSystem } from './systems';
-import type { Person, SetScore, Sheet, UploadInfo } from './types';
+import type { Person, SetScore, Sheet } from './types';
 import { gameNotation } from './export';
 import { gameResult } from './score';
 import { titleCase } from '../format';
@@ -184,9 +185,11 @@ export function vttlStatus(s: Sheet, sys: MatchSystem): VttlStatus {
   const keys = new Set([...Object.keys(mine), ...Object.keys(seen)]);
   const differs = [...keys].some((k) => (mine[k] ?? '') !== (seen[k] ?? ''));
   if (!differs) return Object.values(mine).some(Boolean) ? 'synced' : 'none';
-  if (s.upload && !s.upload.ok) return 'error';
-  return 'pending';
+  return uploadFailed(s) ? 'error' : 'pending';
 }
+
+/** The last real upload was refused, got no answer, or VTTL holds other data. */
+const uploadFailed = (s: Sheet) => !!s.upload && !s.upload.dryRun && (!s.upload.ok || s.upload.confirmed === false);
 
 /** Status of one game row: is its result on VTTL? `null` = nothing to show. */
 export function gameStatuses(s: Sheet, sys: MatchSystem): (VttlStatus | null)[] {
@@ -197,7 +200,7 @@ export function gameStatuses(s: Sheet, sys: MatchSystem): (VttlStatus | null)[] 
     const m = mine[`g.${gi}`] ?? '';
     const v = seen[`g.${gi}`] ?? '';
     if (m === v) return m ? 'synced' : null;
-    return s.upload && !s.upload.ok ? 'error' : 'pending';
+    return uploadFailed(s) ? 'error' : 'pending';
   });
 }
 
@@ -209,23 +212,23 @@ export const GAME_STATUS_TEXT: Partial<Record<VttlStatus, string>> = {
 
 export const STATUS_TEXT: Record<VttlStatus, string> = {
   locked: 'Gevalideerd door VTTL',
-  error: 'De laatste upload naar VTTL is mislukt',
+  error: 'De laatste upload naar VTTL is niet gelukt',
   synced: 'VTTL heeft dezelfde gegevens als dit wedstrijdblad',
   pending: 'Dit wedstrijdblad heeft wijzigingen die nog niet op VTTL staan',
   none: 'Nog niets ingevuld',
 };
 
-/** Ops that record an upload. After a real, successful upload VTTL holds what we sent. */
-export function uploadOps(s: Sheet, sys: MatchSystem, info: UploadInfo): Op[] {
-  const ops: Op[] = [{ p: ['upload'], v: info }];
-  if (info.ok && !info.dryRun) {
-    const sent = canonical(s, sys);
-    if (info.partial) {
-      // A partial upload has no captains and no referee (ScoreSheet CsvExporter).
-      for (const k of ['home.cap', 'away.cap', 'ref']) sent[k] = s.vttlSeen?.[k] ?? '';
-    }
-    ops.push({ p: ['vttlSeen'], v: sent });
-    if (!info.partial) ops.push({ p: ['disablePartialUpload'], v: true });
-  }
-  return ops;
+/** A canonical key in words, e.g. "g.3" -> "wedstrijd 4", "home.p.0" -> "speler 1 thuis". */
+export function keyLabel(key: string): string {
+  const [a, b, c] = key.split('.');
+  if (a === 'g') return `wedstrijd ${Number(b) + 1}`;
+  if (a === 'ref') return 'scheidsrechter';
+  const side = a === 'home' ? 'thuis' : 'bezoekers';
+  const n = Number(c) + 1;
+  if (b === 'p') return `speler ${n} ${side}`;
+  if (b === 'd') return `dubbel ${n} ${side}`;
+  if (b === 'sub') return `invaller ${side}`;
+  if (b === 'cap') return `kapitein ${side}`;
+  if (b === 'ff') return `forfait ${side}`;
+  return key;
 }
