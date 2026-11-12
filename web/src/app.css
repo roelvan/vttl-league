@@ -318,7 +318,8 @@ button.chip { cursor: pointer; }
 .tally .pick { width: 100%; padding: 4px 6px; margin: -4px -6px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; min-height: 36px; }
 .tally .pick:hover { background: var(--surface-2); }
 .tally .pick[aria-pressed='true'] { background: var(--fg); color: var(--bg); }
-.tally .pick[aria-pressed='true'] .rank-tag { box-shadow: 0 0 0 1px var(--bg); }
+/* Ring in a darker shade of the tag's own team tint (its ink colour), not black. */
+.tally .pick[aria-pressed='true'] .rank-tag { box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 55%, transparent); }
 .tally td:first-child { width: 100%; }
 .tally .wl { font: 700 18px/1 var(--font); letter-spacing: -0.02em; text-align: right; padding-left: 12px; width: 1%; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pips { display: flex; gap: 3px; justify-content: flex-end; }
