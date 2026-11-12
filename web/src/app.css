@@ -519,7 +519,7 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
 .seg-btn.icon { display: grid; place-items: center; padding: 0; width: 36px; }
 @media (min-width: 720px) {
   .view-toggle { display: flex; }
-  .order.cols-2 { grid-template-columns: repeat(2, minmax(0, 470px)); }
+  .order.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 720px) {
   .tally-split { grid-template-columns: 1fr 1fr; }
