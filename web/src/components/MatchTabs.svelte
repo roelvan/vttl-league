@@ -7,6 +7,6 @@
 </script>
 
 <nav class="match-tabs hide-mobile" aria-label="Wedstrijd">
-  <a href={urls.match(matchId)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}>Live</a>
+  <a href={urls.match(matchId)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
   <a href={urls.lineup(matchId)} onclick={link} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
 </nav>

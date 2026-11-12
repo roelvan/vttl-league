@@ -9,6 +9,6 @@
 
 <nav class="bottomnav" aria-label="Wedstrijd">
   <a href={urls.day(day)} onclick={link}><Icon name="left" size={22} />Clubavond</a>
-  <a href={urls.match(matchId)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}><Icon name="match" size={22} />Live</a>
+  <a href={urls.match(matchId)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}><Icon name="match" size={22} />Wedstrijd</a>
   <a href={urls.lineup(matchId)} onclick={link} aria-current={section === 'lineup' ? 'page' : undefined}><Icon name="lineup" size={22} />Opstelling</a>
 </nav>
