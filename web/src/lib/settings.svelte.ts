@@ -3,14 +3,16 @@
 interface Settings {
   /** Dark is the default (design); the sun button switches. */
   theme: 'dark' | 'light';
+  /** Match order: two columns (game 1 | 2 side by side, as on table 1 | 2) or one column. */
+  order: 'grid' | 'list';
 }
 
-const defaults: Settings = { theme: 'dark' };
+const defaults: Settings = { theme: 'dark', order: 'grid' };
 
 function load(): Settings {
   try {
-    const { theme } = JSON.parse(localStorage.getItem('vl.settings') ?? '{}');
-    return { ...defaults, ...(theme ? { theme } : {}) };
+    const { theme, order } = JSON.parse(localStorage.getItem('vl.settings') ?? '{}');
+    return { ...defaults, ...(theme ? { theme } : {}), ...(order === 'grid' || order === 'list' ? { order } : {}) };
   } catch {
     return defaults;
   }

@@ -41,16 +41,17 @@
   const liveGames = $derived(view ? liveGamesFor(matchId, view) : {});
   const timeoutsUsed = $derived(sheet && view ? timeoutsUsedFor(matchId, sheet, view) : {});
 
-  /** Keys of the rows picked in the Spelers card. */
+  /** Keys of the rows picked (clicked) in the Spelers card: only their games are shown. */
   let picked = $state<string[]>([]);
-  /** Key of the row under the pointer; it previews only that player's games. */
+  /** Key of the row under the pointer: its games stand out, the others are dimmed. */
   let hovered = $state<string | null>(null);
-  const focus = $derived.by(() => {
-    const keys = hovered ? [hovered] : picked;
+  function gamesOf(keys: string[]): Set<number> | null {
     if (!keys.length || !sheet || !view) return null;
     const rows = [...tally(sheet, view, 'home'), ...tally(sheet, view, 'away')].filter((r) => keys.includes(r.key));
     return new Set(rows.flatMap((r) => r.games));
-  });
+  }
+  const only = $derived(gamesOf(picked));
+  const focus = $derived(hovered ? gamesOf([hovered]) : null);
   $effect(() => {
     void matchId;
     picked = [];
@@ -107,7 +108,7 @@
         </section>
       {/if}
 
-      <MatchOrder {view} live={liveGames} {timeoutsUsed} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
+      <MatchOrder {view} live={liveGames} {timeoutsUsed} {only} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
     </div>
 
     <div class="match-aside">

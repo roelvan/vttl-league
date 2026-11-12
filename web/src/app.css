@@ -273,8 +273,8 @@ button.chip { cursor: pointer; }
 .court-f .btns .btn { flex: 1 1 auto; width: auto; white-space: nowrap; }
 
 /* ------------------------------------------------------------------ match order tiles */
-.order { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 10px; padding: 0 16px 16px; }
-.mt { display: block; width: 100%; padding: 10px 10px 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.order { display: grid; grid-template-columns: minmax(0, 470px); gap: 10px; padding: 0 16px 16px; }
+.mt { display: block; width: 100%; padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
 .mt:not(.static):hover { border-color: var(--faint); }
 .mt.static { cursor: default; }
 .mt.dim { opacity: 0.35; }
@@ -283,7 +283,7 @@ button.chip { cursor: pointer; }
 .mt.is-live { border-color: var(--live); }
 .mt.is-later, .mt.is-next { background: transparent; }
 .mt.is-error { border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
-.mt-head { display: flex; gap: 8px; align-items: center; font: 600 12px/1 var(--font); color: var(--muted); margin-bottom: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+.mt-head { display: flex; gap: 8px; align-items: center; font: 600 12px/1 var(--font); color: var(--muted); margin-bottom: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
 .mt-head .chip { padding: 3px 7px; font-size: 11px; }
 .mt-rows { display: grid; gap: 6px; min-width: 0; }
 .mt-row { display: grid; grid-template-columns: 3px minmax(0, 1fr) repeat(var(--boxes, 5), 25px) 30px; gap: 3px; align-items: center; }
@@ -510,11 +510,15 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
 }
 
 /* ------------------------------------------------------------------ breakpoints */
-@media (min-width: 560px) and (max-width: 859px) {
-  .order { grid-template-columns: minmax(0, 500px); }
-}
 @media (min-width: 860px) {
   .tables { grid-template-columns: 1fr 1fr; }
+}
+/* Match order view: the choice only shows where two columns fit; a phone keeps one column. */
+.view-toggle { display: none; }
+.seg-btn.icon { display: grid; place-items: center; padding: 0; width: 36px; }
+@media (min-width: 720px) {
+  .view-toggle { display: flex; }
+  .order.cols-2 { grid-template-columns: repeat(2, minmax(0, 470px)); }
 }
 @media (min-width: 720px) {
   .tally-split { grid-template-columns: 1fr 1fr; }
