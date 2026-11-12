@@ -5,6 +5,7 @@
   import { getSystem, slotLabel } from '../../lib/sheet/systems';
   import { computeScore } from '../../lib/sheet/score';
   import { matchTypeMarks, LEVEL_NAME, printedComments, playersLabel } from '../../lib/sheet/print';
+  import vttlLogo from '../../assets/vttl-logo.svg';
 
   let { sheet }: { sheet: Sheet } = $props();
 
@@ -26,8 +27,10 @@
 
 <div class="page landscape ps">
   <!-- ScoreSheet keeps the top band for the VTTL sponsor image, which we do not print. The content
-       (4.19-28.45 cm wide, 5.19-20.25 cm high) is moved to the middle of the A4 page instead. -->
+       (4.19-28.45 cm wide, 5.19-20.25 cm high) is moved to the middle of the A4 page instead.
+       The VTTL logo goes in the free band above the address box, as on the official sheet. -->
   <div class="ps-content">
+  {#if sheet.isOfficial}<img class="ps-logo" src={vttlLogo} alt="VTTL" />{/if}
   {#if !sheet.isOfficial}<div class="ps-ps-unofficial">ONOFFICIEEL WEDSTRIJDBLAD</div>{/if}
 
   <div class="ps-box" style="left:4.19cm; top:5.19cm; width:6.15cm; height:2.32cm; display:flex">
@@ -158,6 +161,7 @@
   .ps :global(*) { box-sizing: border-box; }
   .ps-content { position: absolute; inset: 0; transform: translate(-1.47cm, -2.22cm); }
   .ps-abs, .ps-box { position: absolute; }
+  .ps-logo { position: absolute; left: 4.19cm; top: 3cm; height: 1.95cm; width: auto; }
   .ps-box { border: 1px solid #000; }
   .ps-f25 { font-size: 0.25cm; }
   .ps-f35 { font-size: 0.35cm; }

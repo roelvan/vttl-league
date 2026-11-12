@@ -125,7 +125,10 @@
     dialog = null;
     printJob = job;
     await tick();
-    const page = document.getElementById('page-size') ?? document.head.appendChild(Object.assign(document.createElement('style'), { id: 'page-size' }));
+    // Wait for the images (the VTTL logo), else the print can open without them.
+    const imgs = document.querySelectorAll<HTMLImageElement>('#print-root img');
+    await Promise.all([...imgs].map((img) => img.decode().catch(() => {})));
+    const page =document.getElementById('page-size') ?? document.head.appendChild(Object.assign(document.createElement('style'), { id: 'page-size' }));
     page.textContent = `@page { size: A4 ${job.what === 'sheet' ? 'landscape' : 'portrait'}; margin: 0; }`;
     addEventListener(
       'afterprint',
