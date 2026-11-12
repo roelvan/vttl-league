@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api, ApiError, OfflineError } from '../lib/api';
   import { setMe } from '../lib/session.svelte';
-  import vttlLogo from '../assets/vttl-logo.jpg';
+  import VttlLogo from '../components/VttlLogo.svelte';
 
   let account = $state('');
   let password = $state('');
@@ -26,7 +26,7 @@
 
 <main class="center">
   <form class="card login" onsubmit={submit}>
-    <img class="logo" src={vttlLogo} alt="VTTL – Vlaamse Tafeltennisliga" width="190" height="90" />
+    <VttlLogo class="logo" alt="VTTL – Vlaamse Tafeltennisliga" width={190} height={83} />
     <p class="muted">Meld je aan met je VTTL-account.</p>
     <label class="field">Login <input bind:value={account} autocomplete="username" autocapitalize="off" required /></label>
     <label class="field">Wachtwoord <input type="password" bind:value={password} autocomplete="current-password" required /></label>

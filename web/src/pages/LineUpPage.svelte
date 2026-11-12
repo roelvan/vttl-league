@@ -24,18 +24,9 @@
   if (!boards.loaded) loadDevices().catch(() => {});
 
   // ---------------------------------------------------------------- tables
-  const tables = $derived<TableSetup[]>([0, 1].map((i) => sheet?.tables?.[i] ?? { no: '', device: null }));
-  /** Tables used by the other matches of the club on this day. */
-  const busy = $derived.by(() => {
-    if (!sheet) return new Map<string, string>();
-    const m = new Map<string, string>();
-    for (const e of Object.values(ws.entries)) {
-      const o = e.view;
-      if (o.id === sheet.id || o.day !== sheet.day) continue;
-      for (const t of o.tables ?? []) if (t.no) m.set(t.no.trim(), o.home.name);
-    }
-    return m;
-  });
+  // Always two tables. Only the scoreboard per table is chosen.
+  const tables = $derived<TableSetup[]>([0, 1].map((i) => ({ device: sheet?.tables?.[i]?.device ?? null })));
+  /** Scoreboards used by the other matches of the club on this day. */
   const busyDevices = $derived.by(() => {
     if (!sheet) return new Map<string, string>();
     const m = new Map<string, string>();
@@ -47,11 +38,8 @@
     return m;
   });
 
-  function setTable(i: number, patch: Partial<TableSetup>) {
-    const next = tables.map((t, j) => (j === i ? { ...t, ...patch } : t));
-    // Drop empty tables at the end, so "game i on table i % n" uses only real tables.
-    while (next.length && !next.at(-1)!.no.trim() && !next.at(-1)!.device) next.pop();
-    change(matchId, [{ p: ['tables'], v: next }]);
+  function setDevice(i: number, device: string | null) {
+    change(matchId, [{ p: ['tables'], v: tables.map((t, j) => (j === i ? { device } : t)) }]);
   }
 
   // ---------------------------------------------------------------- doubles
@@ -79,7 +67,6 @@
   const playersReady = $derived(
     !!sheet && !!sys && (['home', 'away'] as const).every((s) => sheet[s].forfeit || sheet[s].players.slice(0, sys.playerCount).every((p, i) => p.computerNumber || (sys.slots.find((x) => x.kind === 'single' && x.player === i) as { optional?: boolean })?.optional)),
   );
-  const tablesReady = $derived(tables.some((t) => t.no.trim()));
 
   function start() {
     if (!sheet?.started) change(matchId, [{ p: ['started'], v: true }]);
@@ -96,9 +83,9 @@
     <div class="board-meta">
       <span>{view.started ? 'Avond bezig' : 'Voor wedstrijd 1'}</span><span class="dot"></span><span>{sheet.home.name} – {sheet.away.name}</span>
     </div>
-    <div class="card-h"><h2>Opstelling en tafels</h2></div>
+    <div class="card-h"><h2>Opstelling en scoreborden</h2></div>
     <p class="hint">
-      Kies de tafels en de spelers van beide ploegen. De spelers staan in volgorde van klassement, zoals op het VTTL-blad. De {view.games.length} wedstrijden volgen daaruit.
+      Kies de spelers van beide ploegen en een scorebord per tafel. De spelers staan in volgorde van klassement, zoals op het VTTL-blad. De {view.games.length} wedstrijden volgen daaruit.
     </p>
   </section>
 
@@ -110,24 +97,19 @@
 
   <div class="steps">
     <section class="card">
-      <div class="card-h"><span class="step-n">1</span><h2>Tafels</h2><span class="spacer"></span><span class="eyebrow">{tables.filter((t) => t.no.trim()).length} van 2</span></div>
+      <div class="card-h"><span class="step-n">1</span><h2>Scoreborden</h2></div>
       <div class="card-b">
         <div class="tables-pick">
           {#each tables as t, i (i)}
-            {@const usedBy = t.no.trim() ? busy.get(t.no.trim()) : undefined}
+            {@const usedBy = t.device ? busyDevices.get(t.device) : undefined}
             <div class="tpick">
-              <span class="tt">{i === 0 ? 'Eerste tafel' : 'Tweede tafel'}</span>
               <div class="row">
-                <label for="tno{i}" class="muted">Nummer</label>
-                <input id="tno{i}" inputmode="numeric" value={t.no} placeholder="bv. {i === 0 ? 7 : 8}" disabled={!editable} onchange={(e) => setTable(i, { no: e.currentTarget.value.trim() })} />
-              </div>
-              <div class="row">
-                <label for="tdev{i}" class="muted">Scorebord</label>
-                <select id="tdev{i}" value={t.device ?? ''} disabled={!editable} onchange={(e) => setTable(i, { device: e.currentTarget.value || null })}>
+                <label for="tdev{i}" class="tt">Tafel {i + 1}</label>
+                <select id="tdev{i}" value={t.device ?? ''} disabled={!editable} onchange={(e) => setDevice(i, e.currentTarget.value || null)}>
                   <option value="">Geen (manueel)</option>
                   {#each boards.devices as d (d.id)}
                     {@const other = tables.findIndex((x, j) => j !== i && x.device === d.id)}
-                    <option value={d.id} disabled={other >= 0}>{d.alias || d.id}{other >= 0 ? ` (al op ${other === 0 ? 'eerste' : 'tweede'} tafel)` : ''}{busyDevices.has(d.id) ? ` (ook bij ${busyDevices.get(d.id)})` : ''}</option>
+                    <option value={d.id} disabled={other >= 0}>{d.alias || d.id}{other >= 0 ? ` (al op tafel ${other + 1})` : ''}{busyDevices.has(d.id) ? ` (ook bij ${busyDevices.get(d.id)})` : ''}</option>
                   {/each}
                 </select>
               </div>
@@ -136,7 +118,7 @@
           {/each}
         </div>
         <p class="hint">
-          Oneven wedstrijden gaan naar de eerste tafel, even wedstrijden naar de tweede. Met één tafel gaan alle wedstrijden naar die tafel.
+          Oneven wedstrijden spelen op tafel 1, even wedstrijden op tafel 2. Zonder scorebord vul je de scores manueel in.
           {#if !boards.devices.length}Scoreborden voeg je toe via <a href={urls.settings()} onclick={link}>Instellingen</a>.{/if}
         </p>
       </div>
@@ -208,12 +190,10 @@
     <section class="card">
       <div class="card-b stack">
         {#if editable}
-          {#if !tablesReady || !playersReady}
-            <p class="hint">
-              {!tablesReady ? 'Vul minstens één tafel in. ' : ''}{!playersReady ? 'Nog niet alle spelers zijn gekozen. Je kunt toch al starten.' : ''}
-            </p>
+          {#if !playersReady}
+            <p class="hint">Nog niet alle spelers zijn gekozen. Je kunt toch al starten.</p>
           {/if}
-          <button class="btn big" type="button" onclick={start} disabled={!tablesReady}>{view.started ? 'Naar de wedstrijd' : 'Start de avond'}</button>
+          <button class="btn big" type="button" onclick={start}>{view.started ? 'Naar de wedstrijd' : 'Start de avond'}</button>
         {:else}
           <a class="btn big ghost" href={urls.match(matchId)} onclick={link}>Naar de wedstrijd</a>
         {/if}

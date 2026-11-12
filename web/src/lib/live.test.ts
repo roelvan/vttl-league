@@ -50,7 +50,7 @@ describe('liveView', () => {
 
   it('not started: no live games, first two are next', () => {
     const s = men();
-    s.tables = [{ no: '7', device: 'b1' }, { no: '8', device: null }];
+    s.tables = [{ device: 'b1' }, { device: null }];
     const v = liveView(s);
     expect(v.started).toBe(false);
     expect(v.games.map((g) => g.state).slice(0, 3)).toEqual(['next', 'next', 'later']);
@@ -60,7 +60,7 @@ describe('liveView', () => {
 
   it('fixed pairs: odd games on table 1, even games on table 2', () => {
     const s = men();
-    s.tables = [{ no: '7', device: null }, { no: '8', device: null }];
+    s.tables = [{ device: null }, { device: null }];
     s.started = true;
     s.results[0] = pad(win(true));
     s.results[2] = pad(win(false));
@@ -79,14 +79,14 @@ describe('liveView', () => {
     expect(v.games[5].state).toBe('later');
   });
 
-  it('one table takes all games', () => {
+  it('always uses table 1 and table 2, also without setup', () => {
     const s = men();
-    s.tables = [{ no: '3', device: null }];
     s.started = true;
     const v = liveView(s);
-    expect(v.games.every((g) => g.table === 0)).toBe(true);
+    expect(v.tables.map((t) => [t.no, t.device])).toEqual([['1', null], ['2', null]]);
+    expect(v.games.map((g) => g.table).slice(0, 4)).toEqual([0, 1, 0, 1]);
     expect(v.tables[0].current?.pos).toBe(1);
-    expect(v.tables[0].next?.pos).toBe(2);
+    expect(v.tables[1].current?.pos).toBe(2);
   });
 
   it('team forfeit gives every game to the other side', () => {

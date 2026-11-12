@@ -1,6 +1,7 @@
 <script lang="ts">
   import TopBar from '../components/TopBar.svelte';
   import BottomNav from '../components/BottomNav.svelte';
+  import MatchTabs from '../components/MatchTabs.svelte';
   import ClubNight from '../components/ClubNight.svelte';
   import Toast from '../components/Toast.svelte';
   import MatchPage from './MatchPage.svelte';
@@ -68,8 +69,6 @@
   const rows = $derived(list?.matches ?? []);
   const row = $derived(m.id ? (rows.find((x) => x.matchId === m.id) ?? null) : null);
   const sheet = $derived(m.id ? ws.entries[m.id]?.view : undefined);
-  /** The match the nav items point to: the one on screen, else the last one shown. */
-  const navMatch = $derived(m.id ?? ws.current);
   const day = $derived(m.day ?? row?.date ?? sheet?.day ?? (ws.current ? ws.entries[ws.current]?.view.day : null) ?? playDayIso());
 
   $effect(() => {
@@ -101,7 +100,7 @@
         : `${m.section === 'lineup' ? 'Opstelling' : 'Wedstrijd'}${sheet ? `: ${sheet.home.name} – ${sheet.away.name}` : ''}`,
   );
   $effect(() => {
-    document.title = `${pageTitle} · Interclub Live`;
+    document.title = `${pageTitle} · VTTL Competitie`;
   });
 
   async function onaction(a: MenuAction) {
@@ -141,8 +140,8 @@
 </script>
 
 <TopBar
-  section={m.section}
-  matchId={navMatch}
+  matchId={m.id}
+  {day}
   datechip={!row && pub ? (data.publicMatches[pub]?.club?.name ?? pub) : ''}
   {onaction}
   printActions={homeMatch}
@@ -157,7 +156,7 @@
   {/if}
 
   <main class="view">
-    <h1 class="sr-only">{pageTitle} · Interclub Live</h1>
+    <h1 class="sr-only">{pageTitle} · VTTL Competitie</h1>
     {#if m.section === 'night'}
       <div class="view-night-only view"><ClubNight {day} {rows} loaded={!!list} currentId={ws.current} /></div>
       <div class="card empty hide-mobile">
@@ -165,8 +164,10 @@
         <p>Kies links een wedstrijd van de clubavond om ze live te volgen.</p>
       </div>
     {:else if m.section === 'match' && m.id}
+      <MatchTabs section="match" matchId={m.id} />
       {#key m.id}<MatchPage matchId={m.id} {row} {onaction} canPrint={homeMatch} />{/key}
     {:else if m.section === 'lineup' && m.id}
+      <MatchTabs section="lineup" matchId={m.id} />
       {#key m.id}<LineUpPage matchId={m.id} {row} />{/key}
     {:else}
       <SettingsPage />
@@ -174,7 +175,7 @@
   </main>
 </div>
 
-<BottomNav section={m.section} matchId={navMatch} {day} />
+{#if (m.section === 'match' || m.section === 'lineup') && m.id}<BottomNav section={m.section} matchId={m.id} {day} />{/if}
 <Toast />
 
 {#if dialog?.kind === 'print' && m.id}

@@ -84,7 +84,14 @@
 
   <div class="match-grid">
     <div class="match-main">
-      {#if view.tables.length && !view.complete}
+      {#if editable && !view.started}
+        <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
+          <span class="ico"><Icon name="lineup" size={22} /></span>
+          <span><span class="t">Opstelling en scoreborden</span><p>Kies de spelers en de scoreborden. Daarna start de avond.</p></span>
+          <span class="spacer"></span>
+          <Icon name="chevron" />
+        </a>
+      {:else if !view.complete}
         <section class="tables" aria-label="Tafels in gebruik">
           {#each view.tables as t (t.index)}
             <TableCard
@@ -98,13 +105,6 @@
             />
           {/each}
         </section>
-      {:else if editable && !view.started}
-        <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
-          <span class="ico"><Icon name="lineup" size={22} /></span>
-          <span><span class="t">Opstelling en tafels</span><p>Kies de tafels en de spelers. Daarna start de avond.</p></span>
-          <span class="spacer"></span>
-          <Icon name="chevron" />
-        </a>
       {/if}
 
       <MatchOrder {view} live={liveGames} {timeoutsUsed} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
@@ -116,7 +116,7 @@
       {#if editable}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
           <span class="ico"><Icon name="lineup" size={22} /></span>
-          <span><span class="t">Opstelling &amp; tafels</span><p>{view.started ? 'Wijzigen kan nog, met een waarschuwing.' : 'Vul in voor wedstrijd 1.'}</p></span>
+          <span><span class="t">Opstelling &amp; scoreborden</span><p>{view.started ? 'Wijzigen kan nog, met een waarschuwing.' : 'Vul in voor wedstrijd 1.'}</p></span>
           <span class="spacer"></span>
           <Icon name="chevron" />
         </a>

@@ -43,7 +43,7 @@ export interface GameView {
   result: Won;
   winner: 'h' | 'a' | null;
   state: GameState;
-  /** Index in sheet.tables (fixed pairs), or null when no tables are set. */
+  /** Index of the table (fixed pairs: 0 = table 1, 1 = table 2). Null is kept for older callers. */
   table: number | null;
   /** The first box that is still empty, while the game is live; else null. */
   currentBox: number | null;
@@ -169,7 +169,8 @@ function sideOf(sheet: Sheet, sys: MatchSystem, gi: number, side: Side, sets: Se
 export function liveView(sheet: Sheet): LiveView {
   const sys = getSystem(sheet.matchSystemId);
   const score = computeScore(sheet, sys);
-  const tables = sheet.tables?.filter((t) => t.no.trim()) ?? [];
+  // Always two tables: table 1 and table 2. Only the scoreboard per table is set.
+  const tables = [0, 1].map((i) => ({ no: String(i + 1), device: sheet.tables?.[i]?.device ?? null }));
   const anyResult = sheet.results.some((g) => g?.some((s) => !isEmptySet(s)));
   const started = !!sheet.started || anyResult;
 
@@ -195,7 +196,7 @@ export function liveView(sheet: Sheet): LiveView {
       result: r.won,
       winner: decided ? winner : null,
       state: r.won === 'error' ? 'error' : decided ? 'final' : r.won === 'partial' ? 'live' : 'later',
-      table: tables.length ? gi % tables.length : null,
+      table: gi % tables.length,
       currentBox: null,
     };
   });

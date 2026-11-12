@@ -5,6 +5,7 @@
   import { vttlStatus, STATUS_TEXT } from '../../lib/sheet/vttl';
   import Icon from '../Icon.svelte';
   import type { MenuAction } from '../../lib/nav';
+  import { deviceAlias } from '../../lib/boards.svelte';
 
   let {
     sheet,
@@ -31,7 +32,7 @@
     <dl class="info">
       <dt>Zaal</dt><dd>{sheet.address.split('\n').join(', ') || '–'}</dd>
       <dt>Aanvang</dt><dd>{sheet.startHour || '–'}{sheet.endHour ? ` · einde ${sheet.endHour}` : ''}</dd>
-      <dt>Tafels</dt><dd>{view.tables.map((t) => `${t.no}${t.device ? ' (scorebord)' : ''}`).join(' · ') || '–'}</dd>
+      <dt>Tafels</dt><dd>{view.tables.map((t) => `${t.no}: ${t.device ? deviceAlias(t.device) : 'manueel'}`).join(' · ')}</dd>
       <dt>Formaat</dt><dd>{view.sys.name} · best of {view.sys.boxes}</dd>
       <dt>Scheidsrechter</dt><dd>{person(sheet.chiefReferee)}</dd>
       {#if status}

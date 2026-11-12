@@ -92,7 +92,7 @@ export interface Sheet {
 
   /** Live follow: the line-up is done and the evening has started ("Start de avond"). */
   started?: boolean;
-  /** The tables in play, in order. Games go out in fixed pairs: game i is on table i % length. */
+  /** Setup of table 1 and table 2. There are always two tables: odd games on table 1, even games on table 2. */
   tables?: TableSetup[];
 
   /** Point sequences of the games a scoreboard counted, by game index (for the stats). */
@@ -122,8 +122,6 @@ export interface BoardPlay {
 }
 
 export interface TableSetup {
-  /** Table number in the hall, as typed. */
-  no: string;
   /** Scoreboard device id on this table, or null for manual entry. */
   device: string | null;
 }

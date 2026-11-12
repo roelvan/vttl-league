@@ -61,7 +61,7 @@
     <div class="card-h"><h2>Scoreborden van {session.me?.club?.name ?? 'de club'}</h2></div>
     <div class="card-b stack">
       <p class="hint">
-        Voeg elk scorebord één keer toe met zijn ID (zoals op het scorebord) en een naam. In de opstelling kies je daarna per tafel een scorebord.
+        Voeg elk scorebord één keer toe met zijn ID (zoals op het scorebord) en een naam. In de opstelling kies je daarna een scorebord voor tafel 1 en tafel 2.
       </p>
       {#if error}<p class="error">{error}</p>{/if}
       <ul class="list">

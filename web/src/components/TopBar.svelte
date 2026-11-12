@@ -6,17 +6,19 @@
   import { session, logout } from '../lib/session.svelte';
   import { ws, pendingCount } from '../lib/workspace.svelte';
   import { publicClub } from '../lib/viewer.svelte';
+  import VttlLogo from './VttlLogo.svelte';
 
   let {
-    section,
     matchId,
+    day,
     datechip = '',
     onaction,
     printActions = false,
     matchActions = false,
   }: {
-    section: 'match' | 'night' | 'lineup' | 'other';
     matchId: string | null;
+    /** The club night the brand link opens. */
+    day: string;
     datechip?: string;
     onaction: (a: MenuAction) => void;
     /** Show print (a home match of our club is open, also when validated). */
@@ -47,10 +49,7 @@
 
 <header class="topbar">
   <div class="topbar-in">
-    <nav class="topnav" aria-label="Hoofdmenu">
-      <a href={matchId ? urls.match(matchId) : undefined} onclick={link} class:disabled={!matchId} aria-disabled={!matchId || undefined} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
-      <a href={matchId ? urls.lineup(matchId) : undefined} onclick={link} class:disabled={!matchId} aria-disabled={!matchId || undefined} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
-    </nav>
+    <a class="brand" href={urls.day(day)} onclick={link}><VttlLogo alt="VTTL: naar de clubavond" width={64} height={28} /></a>
     <span class="spacer"></span>
     {#if datechip}<span class="datechip">{datechip}</span>{/if}
     {#if session.me && !publicClub()}<span class="sync-dot {sync}" title={syncText} role="img" aria-label={syncText}></span>{/if}

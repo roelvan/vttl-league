@@ -63,7 +63,6 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
       played = v.games.filter((g) => g.state === 'final').length;
       segments = v.games.map((g) => (g.winner ?? (g.state === 'live' ? 'live' : '')));
       state = v.complete ? 'final' : v.started ? 'live' : 'soon';
-      tables = v.tables.map((t) => `T${t.no}`).join(' · ');
     } catch {
       // Unknown match system: fall back to the VTTL row.
     }
