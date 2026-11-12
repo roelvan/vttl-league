@@ -60,26 +60,23 @@
   <section class="card">
     <div class="card-h"><h2>Scoreborden van {session.me?.club?.name ?? 'de club'}</h2></div>
     <div class="card-b stack">
-      <p class="hint">
-        Voeg elk scorebord één keer toe met zijn ID (zoals op het scorebord) en een naam. In de opstelling kies je daarna een scorebord voor tafel 1 en tafel 2.
-      </p>
       {#if error}<p class="error">{error}</p>{/if}
       <ul class="list">
         {#each boards.devices as d (d.id)}
           {@const online = !!d.lastSeen && Date.now() - d.lastSeen < 120000}
-          <li class="row-btn">
-            <Icon name="board" />
+          <li class="row-btn board-row">
             {#if d.id in editing}
               <input class="grow" bind:value={editing[d.id]} placeholder="Naam" aria-label="Naam van {d.id}" />
-              <button class="btn" type="button" onclick={() => rename(d.id)}>Bewaren</button>
-              <button class="btn ghost" type="button" onclick={() => delete editing[d.id]}>Annuleren</button>
+              <button class="btn icon-btn" type="button" onclick={() => rename(d.id)} aria-label="Bewaren" title="Bewaren"><Icon name="check" /></button>
+              <button class="btn ghost icon-btn" type="button" onclick={() => delete editing[d.id]} aria-label="Annuleren" title="Annuleren"><Icon name="close" /></button>
             {:else}
-              <span class="grow">
-                <b>{d.alias || d.id}</b><br />
-                <span class="muted mono">{d.id}</span> · <span class:ok={online} class:muted={!online}>{ago(d.lastSeen)}</span>
+              <span class="grow board-info">
+                <b>{d.alias || d.id}</b>
+                <span class="muted mono">{d.id}</span>
+                <small class:ok={online} class:muted={!online}>{ago(d.lastSeen)}</small>
               </span>
-              <button class="btn ghost" type="button" onclick={() => (editing[d.id] = d.alias)}>Naam wijzigen</button>
-              <button class="btn danger" type="button" onclick={() => remove(d.id)}>Verwijderen</button>
+              <button class="btn ghost icon-btn" type="button" onclick={() => (editing[d.id] = d.alias)} aria-label="Naam wijzigen" title="Naam wijzigen"><Icon name="edit" /></button>
+              <button class="btn danger icon-btn" type="button" onclick={() => remove(d.id)} aria-label="Verwijderen" title="Verwijderen"><Icon name="trash" /></button>
             {/if}
           </li>
         {:else}
@@ -98,3 +95,10 @@
     </div>
   </form>
 </div>
+
+<style>
+  .board-row { flex-wrap: nowrap; }
+  .board-row input.grow { min-width: 0; }
+  .board-info { display: grid; gap: 2px; min-width: 0; }
+  .board-info > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>

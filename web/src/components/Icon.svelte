@@ -2,7 +2,7 @@
   // Line icons from the design (24x24, stroke = currentColor).
   type Name =
     | 'match' | 'night' | 'lineup' | 'sun' | 'moon' | 'more' | 'plus' | 'close' | 'chevron' | 'left' | 'right'
-    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats';
+    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats' | 'edit' | 'trash';
   let { name, size = 20 }: { name: Name; size?: number } = $props();
 </script>
 
@@ -35,6 +35,10 @@
     <path d="M4 12.5 9 17.5 20 6.5" />
   {:else if name === 'settings'}
     <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+  {:else if name === 'edit'}
+    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" />
+  {:else if name === 'trash'}
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
   {:else if name === 'timer'}
     <circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2.5M10 2h4" />
   {:else if name === 'stats'}
