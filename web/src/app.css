@@ -556,7 +556,12 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .match-grid { grid-template-columns: minmax(0, 1fr) 380px; }
 }
 @media (max-width: 1099px) {
-  .match-grid, .match-main, .match-aside { display: grid; gap: 16px; }
+  .match-grid { display: grid; gap: 16px; }
+  /* Phones: one flat column, with the Spelers card above the match order. */
+  .match-main, .match-aside { display: contents; }
+  .match-main > :last-child { order: 2; }
+  .match-aside > :first-child { order: 1; }
+  .match-aside > :not(:first-child) { order: 3; }
   .hide-mobile { display: none !important; }
 }
 @media (max-width: 719px) {
