@@ -287,6 +287,7 @@ button.chip { cursor: pointer; }
 .mt-head .chip { padding: 3px 7px; font-size: 11px; }
 .mt-rows { display: grid; gap: 6px; min-width: 0; }
 .mt-row { display: grid; grid-template-columns: 3px minmax(0, 1fr) repeat(var(--boxes, 5), 25px) 30px; gap: 3px; align-items: center; }
+.mt-row.bare { grid-template-columns: 3px minmax(0, 1fr); }
 .mt-row .bar { width: 3px; height: 30px; border-radius: 2px; background: var(--home); }
 .mt-row .bar.a { background: var(--away); }
 .mt-name { min-width: 0; display: flex; align-items: center; gap: 6px; padding-left: 7px; }

@@ -61,7 +61,7 @@
 {/snippet}
 
 {#snippet row(side: GameSide, cls: 'h' | 'a', lead: boolean, idx: 0 | 1)}
-  <div class="mt-row" class:lose={game.winner && game.winner !== cls}>
+  <div class="mt-row" class:lose={game.winner && game.winner !== cls} class:bare={!started}>
     <span class="bar {cls}"></span>
     <span class="mt-name">
       <span class="n" title={side.people.map((p) => p.full).join(' / ')}>{@render name(side.people)}</span>
