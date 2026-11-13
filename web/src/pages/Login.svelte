@@ -2,6 +2,7 @@
   import { api, ApiError, OfflineError } from '../lib/api';
   import { setMe } from '../lib/session.svelte';
   import VttlLogo from '../components/VttlLogo.svelte';
+  import Credit from '../components/Credit.svelte';
 
   let account = $state('');
   let password = $state('');
@@ -33,4 +34,5 @@
     {#if error}<p class="error">{error}</p>{/if}
     <button class="btn big" type="submit" disabled={busy}>{busy ? 'Bezig…' : 'Aanmelden'}</button>
   </form>
+  <Credit />
 </main>

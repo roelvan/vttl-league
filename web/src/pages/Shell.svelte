@@ -4,6 +4,7 @@
   import MatchTabs from '../components/MatchTabs.svelte';
   import ClubNight from '../components/ClubNight.svelte';
   import Toast from '../components/Toast.svelte';
+  import Credit from '../components/Credit.svelte';
   import MatchPage from './MatchPage.svelte';
   import LineUpPage from './LineUpPage.svelte';
   import SettingsPage from './SettingsPage.svelte';
@@ -175,6 +176,7 @@
     {:else}
       <SettingsPage />
     {/if}
+    <Credit />
   </main>
 </div>
 

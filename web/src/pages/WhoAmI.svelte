@@ -4,6 +4,7 @@
   import { navigate } from '../lib/router.svelte';
   import { playerName } from '../lib/format';
   import type { Member } from '../lib/types';
+  import Credit from '../components/Credit.svelte';
 
   let query = $state('');
   let results = $state<Member[]>([]);
@@ -77,5 +78,6 @@
         {#if !busy && query.trim().length >= 3 && !results.length && !error}<p class="muted">Niemand gevonden.</p>{/if}
       </div>
     </section>
+    <Credit />
   </div>
 </main>
