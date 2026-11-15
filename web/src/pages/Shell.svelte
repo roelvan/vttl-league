@@ -17,14 +17,15 @@
   import { matchIdFromSlug, urls, type MenuAction } from '../lib/nav';
   import { data, loadCategories, loadClubs, loadMatches, loadPublicMatches } from '../lib/data.svelte';
   import { viewer, viewClub, publicClub } from '../lib/viewer.svelte';
-  import { ws, connect, scheduleFlush, ensureMatch, setCurrent, onServerEvent } from '../lib/workspace.svelte';
+  import { ws, connect, scheduleFlush, ensureMatch, preloadDay, setCurrent, onServerEvent } from '../lib/workspace.svelte';
+  import { matchesOn } from '../lib/night';
   import { onBoardMessage, loadDevices } from '../lib/boards.svelte';
   import { session } from '../lib/session.svelte';
   import { canEdit, isHomeMember } from '../lib/access';
   import { validateSheet } from '../lib/validation';
   import { shortDate, playDayIso } from '../lib/format';
   import type { PrintJob } from '../lib/sheet/print';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
 
   // Reference data of the own club in the background; the cached copies are used meanwhile.
   if (session.me) {
@@ -77,6 +78,14 @@
     if (!id) return;
     setCurrent(id);
     if (row && list) ensureMatch(row, list.season).catch((e) => (ws.message = `Laden mislukt: ${e.message}`));
+  });
+
+  // The played matches of the day shown come onto the device in the background.
+  $effect(() => {
+    if (!list) return;
+    const today = matchesOn(rows, day);
+    const season = list.season;
+    untrack(() => preloadDay(today, season));
   });
 
   $effect(() => {

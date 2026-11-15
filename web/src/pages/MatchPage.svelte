@@ -34,6 +34,17 @@
   });
   const editable = $derived(canEdit(sheet) && (row?.isHome ?? true));
 
+  /** The team score that VTTL has, from the match list: known before the results come in. */
+  const vttlScore = $derived.by((): [number, number] | null => {
+    const s = /^\s*(\d+)\s*-\s*(\d+)/.exec(row?.score ?? '');
+    return s && (s[1] !== '0' || s[2] !== '0') ? [Number(s[1]), Number(s[2])] : null;
+  });
+  /**
+   * VTTL has results, but they are not in the match yet (first visit on this device): show the
+   * known score and a skeleton, not an empty match that changes a moment later.
+   */
+  const pending = $derived(!!ws.loading[matchId] && !!view && !view.started && !!vttlScore);
+
   let entry = $state<number | null>(null);
   const entryGame = $derived(entry !== null && view ? view.games[entry] : null);
   const tableOf = (g: GameView) => (g.table !== null && view ? view.tables[g.table] : null);
@@ -81,11 +92,13 @@
     <div class="banner"><Icon name="lock" />VTTL heeft deze uitslag gevalideerd. Niemand kan nog iets wijzigen.</div>
   {/if}
 
-  <ScoreHeader {sheet} {view} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series} />
+  <ScoreHeader {sheet} {view} score={pending ? vttlScore : null} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series} />
 
   <div class="match-grid">
     <div class="match-main">
-      {#if editable && !view.started}
+      {#if pending}
+        <!-- The results are on their way: no tables or line-up card that go away again. -->
+      {:else if editable && !view.started}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
           <span class="ico"><Icon name="lineup" size={22} /></span>
           <span><span class="t">Opstelling en scoreborden</span><p>Kies de spelers en de scoreborden. Daarna start de avond.</p></span>
@@ -108,7 +121,7 @@
         </section>
       {/if}
 
-      <MatchOrder {view} live={liveGames} {timeoutsUsed} {only} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
+      <MatchOrder {view} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
     </div>
 
     <div class="match-aside">

@@ -20,7 +20,12 @@
   let filter = $state<Filter>('all');
 
   const days = $derived(matchDays(rows));
-  const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, ws.entries[r.matchId]?.view)));
+  // A draft is only a local copy of VTTL data: the card then shows the VTTL row itself.
+  const stored = (id: string) => {
+    const e = ws.entries[id];
+    return e && !e.draft ? e.view : undefined;
+  };
+  const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, stored(r.matchId))));
   const shown = $derived(
     cards.filter((c) => (filter === 'all' ? true : c.state === filter)),
   );

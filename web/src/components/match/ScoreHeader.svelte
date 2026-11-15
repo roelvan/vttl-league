@@ -2,12 +2,26 @@
   import type { Sheet } from '../../lib/sheet/types';
   import type { LiveView } from '../../lib/live';
 
-  let { sheet, view, week = '', division = '' }: { sheet: Sheet; view: LiveView; week?: string; division?: string } = $props();
+  let {
+    sheet,
+    view,
+    week = '',
+    division = '',
+    score = null,
+  }: {
+    sheet: Sheet;
+    view: LiveView;
+    week?: string;
+    division?: string;
+    /** The team score of VTTL, shown while the results of the match still load. */
+    score?: [number, number] | null;
+  } = $props();
+  const wins = $derived(score ?? [view.homeWins, view.awayWins]);
 
   const n = $derived(view.games.length);
   const segs = $derived(view.games.map((g) => g.winner ?? (g.state === 'live' ? 'live' : '')));
   const status = $derived(
-    sheet.vttlLocked ? 'Gevalideerd' : view.complete ? 'Einde' : view.started ? 'live' : sheet.startHour ? `Om ${sheet.startHour}` : 'Nog niet begonnen',
+    sheet.vttlLocked ? 'Gevalideerd' : score ? 'Laden…' : view.complete ? 'Einde' : view.started ? 'live' : sheet.startHour ? `Om ${sheet.startHour}` : 'Nog niet begonnen',
   );
 </script>
 
@@ -26,8 +40,8 @@
       <div class="team-name">{sheet.home.name}</div>
       {#if sheet.home.forfeit}<span class="team-sub">Forfait</span>{/if}
     </div>
-    <div class="big-score" aria-label="{view.homeWins} tegen {view.awayWins}">
-      <span class="h">{view.homeWins}</span><span class="sep">-</span><span class="a">{view.awayWins}</span>
+    <div class="big-score" aria-label="{wins[0]} tegen {wins[1]}">
+      <span class="h">{wins[0]}</span><span class="sep">-</span><span class="a">{wins[1]}</span>
     </div>
     <div class="team away">
       <span class="team-tag">Uit</span>

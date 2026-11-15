@@ -7,6 +7,7 @@
 
   let {
     view,
+    loading = false,
     live = {},
     timeoutsUsed = {},
     onopen,
@@ -15,6 +16,8 @@
     onclearfocus,
   }: {
     view: LiveView;
+    /** The results still load: tiles of the same size as the real ones, without content. */
+    loading?: boolean;
     live?: Record<number, LiveGame>;
     /** Per game index: [home, away] took their timeout (scoreboard games only). */
     timeoutsUsed?: Record<number, [boolean, boolean]>;
@@ -55,10 +58,20 @@
     </div>
   </div>
   <div class="order" class:cols-2={settings.order === 'grid'}>
+    {#if loading}
+      <p class="sr-only" role="status">Uitslagen laden…</p>
+      {#each view.games as g (g.index)}
+        <div class="mt skel" aria-hidden="true">
+          <div class="mt-head"><span class="sk head"></span></div>
+          <div class="mt-rows"><span class="sk row"></span><span class="sk row"></span></div>
+        </div>
+      {/each}
+    {:else}
     {#each shown as g (g.index)}
       <MatchTile dim={!!focus && !focus.has(g.index)} game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} live={live[g.index] ?? null} used={timeoutsUsed[g.index] ?? null} {onopen} />
     {:else}
       <p class="muted">Alle wedstrijden zijn gespeeld.</p>
     {/each}
+    {/if}
   </div>
 </section>

@@ -88,6 +88,8 @@ export const ws = $state({
   message: '',
   syncing: false,
   live: false,
+  /** Matches that still wait for the server and VTTL (a match that is new on this device). */
+  loading: {} as Record<string, boolean>,
 });
 let seq = saved.seq;
 
@@ -205,6 +207,31 @@ export async function loadDay(day: string) {
  * (players, results) comes in.
  */
 export async function ensureMatch(row: MatchRow, season: number) {
+  const id = row.matchId;
+  // Only a match without a stored record can still change much: the page shows a skeleton.
+  if (!ws.entries[id] || ws.entries[id].draft) ws.loading[id] = true;
+  try {
+    await bringIn(row, season);
+  } finally {
+    delete ws.loading[id];
+  }
+}
+
+const hasResult = (row: MatchRow) => /[1-9]/.test(row.score) || !!row.games;
+
+/**
+ * Brings the played matches of a day onto this device in the background, one by one, so a
+ * click on a match shows it complete at once. Matches that are already here are left alone:
+ * the server sends their changes. A match without a result has nothing to load.
+ */
+export async function preloadDay(rows: MatchRow[], season: number) {
+  for (const row of rows) {
+    if (row.isBye || !hasResult(row) || ws.entries[row.matchId]) continue;
+    await ensureMatch(row, season).catch(() => {});
+  }
+}
+
+async function bringIn(row: MatchRow, season: number) {
   const id = row.matchId;
   let draftError: unknown;
   if (!ws.entries[id]) {

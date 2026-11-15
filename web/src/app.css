@@ -280,6 +280,11 @@ button.chip { cursor: pointer; }
 .mt { display: block; width: 100%; padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
 .mt:not(.static):hover { border-color: var(--faint); }
 .mt.static { cursor: default; }
+/* Skeleton tile while the results load: the size of a played game, so nothing moves after. */
+.mt.skel { cursor: default; }
+.sk { display: block; border-radius: 6px; background: var(--line); animation: pulse 1.4s ease-in-out infinite; }
+.sk.head { width: 96px; height: 12px; }
+.sk.row { height: 26px; }
 .mt.dim { opacity: 0.35; }
 .mt.dim:hover { opacity: 0.7; }
 /* Live: only the border and the pill are magenta; the rest looks like a finished game. */
@@ -588,7 +593,7 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .datechip { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .seg.live, .chip.live::before, .wave, .mini i.live { animation: none; }
+  .seg.live, .chip.live::before, .wave, .mini i.live, .sk { animation: none; }
   .spinner { animation-duration: 2.4s; }
 }
 
