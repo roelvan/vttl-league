@@ -100,7 +100,8 @@
       {/each}
     </div>
   {:else}
-    <p class="court-idle">Alle wedstrijden op deze tafel zijn gespeeld.</p>
+    <!-- No current game but a next one: the evening has not started yet. -->
+    <p class="court-idle">{table.next ? 'Nog niet begonnen.' : 'Alle wedstrijden op deze tafel zijn gespeeld.'}</p>
   {/if}
 
   <div class="court-f">
