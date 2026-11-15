@@ -86,7 +86,7 @@ fn age(at: i64) -> Duration {
 
 // ---------------------------------------------------------------- types
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Season {
     pub id: i64,
@@ -94,7 +94,7 @@ pub struct Season {
     pub is_current: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Venue {
     pub name: String,
@@ -104,7 +104,7 @@ pub struct Venue {
     pub comment: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Club {
     pub id: String,
@@ -116,7 +116,7 @@ pub struct Club {
     pub venues: Vec<Venue>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Team {
     pub team_id: String,
@@ -127,7 +127,7 @@ pub struct Team {
     pub match_type: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Division {
     pub id: i64,
@@ -137,7 +137,7 @@ pub struct Division {
     pub match_type: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Member {
     pub position: i64,
@@ -152,7 +152,7 @@ pub struct Member {
     pub category: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerCategory {
     pub id: i64,
@@ -167,7 +167,7 @@ pub struct PlayerCategory {
     pub group_members: Vec<i64>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MatchDef {
     pub position: i64,
@@ -178,7 +178,7 @@ pub struct MatchDef {
     pub allow_substitute: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MatchSystem {
     pub id: i64,
@@ -193,7 +193,7 @@ pub struct MatchSystem {
     pub defs: Vec<MatchDef>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Player {
     pub position: i64,
@@ -205,7 +205,7 @@ pub struct Player {
     pub is_forfeited: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DoubleTeam {
     pub position: i64,
@@ -214,7 +214,7 @@ pub struct DoubleTeam {
     pub is_forfeited: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndividualResult {
     pub position: i64,
@@ -228,7 +228,7 @@ pub struct IndividualResult {
     pub scores: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MatchDetails {
     pub details_created: bool,
@@ -245,7 +245,7 @@ pub struct MatchDetails {
     pub away_score: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamMatch {
     pub match_id: String,
@@ -274,7 +274,7 @@ pub struct TeamMatch {
     pub details: Option<MatchDetails>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TestResult {
     pub is_valid_account: bool,

@@ -18,16 +18,20 @@
 //! The day answer is small (the season is about 800 kB). `Tabt::club_matches` puts it on top
 //! of the season, so every reader gets the new scores without a call to VTTL.
 //!
+//! After each day answer, the browsers of the club get the changed matches (a "vttl" message
+//! on the WebSocket), so no browser has to ask on a timer.
+//!
 //! Each call uses the login of a club member with a session, a different one each time.
 //! Without a login, or when VTTL refuses it, the call goes without credentials.
 
-use crate::api::same_club;
+use crate::api::{match_rows, same_club};
 use crate::app::App;
 use crate::db::{self, Db};
 use crate::tabt::{Creds, Team, TeamMatch};
 use crate::when::{local_day, local_unix};
 use crate::{rules, xml};
 use rusqlite::params;
+use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -152,6 +156,33 @@ async fn fetch(app: &App, club: &str, season: i64, turn: usize, what: What<'_>) 
         }
     }
     Err(last.unwrap_or_else(|| anyhow::anyhow!("no login")))
+}
+
+/// The matches of `day` that are new or different in `after`, each one time.
+fn changed<'a>(before: &[TeamMatch], after: &'a [TeamMatch], day: &str) -> Vec<&'a TeamMatch> {
+    let mut seen = HashSet::new();
+    after
+        .iter()
+        .filter(|m| m.date == day && before.iter().find(|b| b.match_id == m.match_id) != Some(*m) && seen.insert(&m.match_id))
+        .collect()
+}
+
+/// Gets one day of a club from VTTL and tells the browsers of the club what changed.
+async fn refresh_day(app: &App, club: &str, season: i64, day: &str, turn: usize) -> anyhow::Result<()> {
+    let before = app.tabt.club_matches_cached(season, club).map(|c| c.1).unwrap_or_default();
+    fetch(app, club, season, turn, What::Day(day)).await?;
+    let after = app.tabt.club_matches_cached(season, club).map(|c| c.1).unwrap_or_default();
+    let new = changed(&before, &after, day);
+    if new.is_empty() {
+        return Ok(());
+    }
+    // Both are in the cache: the match list needs them too.
+    let (Ok(teams), Ok(divisions)) = (app.tabt.teams(None, season, club).await, app.tabt.divisions(None, season).await) else {
+        return Ok(());
+    };
+    tracing::debug!(club, day, matches = new.len(), "vttl poll: new data");
+    app.push(club, json!({ "type": "vttl", "season": season, "rows": match_rows(&new, &teams, &divisions, club) }));
+    Ok(())
 }
 
 // ---------------------------------------------------------------- when to ask
@@ -297,7 +328,7 @@ async fn poll_club(app: &Arc<App>, club: &str, season: i64, now: i64, st: &mut C
             continue;
         }
         st.turn += 1;
-        fetch(app, club, season, st.turn, What::Day(&day)).await?;
+        refresh_day(app, club, season, &day, st.turn).await?;
         tracing::debug!(club, day, complete = e.complete, "vttl poll: day");
     }
     Ok(())
@@ -307,7 +338,7 @@ async fn poll_club(app: &Arc<App>, club: &str, season: i64, now: i64, st: &mut C
 pub fn refresh_day_soon(app: &Arc<App>, club: &str, season: i64, day: &str) {
     let (app, club, day) = (app.clone(), club.to_string(), day.to_string());
     tokio::spawn(async move {
-        if let Err(e) = fetch(&app, &club, season, 0, What::Day(&day)).await {
+        if let Err(e) = refresh_day(&app, &club, season, &day, 0).await {
             tracing::warn!(club, day, "vttl refresh after upload: {e:#}");
         }
     });
@@ -382,6 +413,22 @@ mod tests {
         assert!(due(close + 3600, Some(close), &busy, true, None, morning));
         assert!(!due(close + 7200, Some(close + 3600), &busy, true, None, morning));
         assert!(due(morning + 60, Some(close + 3600), &busy, false, None, morning));
+    }
+
+    #[test]
+    fn only_changed_matches_are_pushed() {
+        let before = vec![m("H/1", "19:00:00", "3-1", "WVL154"), m("H/2", "19:00:00", "8-8", "X1")];
+        // H/1 has a new score, H/2 is the same, H/3 is new and is in the list twice.
+        let after = vec![
+            m("H/1", "19:00:00", "4-1", "WVL154"),
+            m("H/2", "19:00:00", "8-8", "X1"),
+            m("H/3", "19:00:00", "", "WVL154"),
+            m("H/3", "19:00:00", "", "WVL154"),
+        ];
+        let ids = |v: Vec<&TeamMatch>| v.iter().map(|m| m.match_id.as_str()).collect::<Vec<_>>().join(" ");
+        assert_eq!(ids(changed(&before, &after, "2026-11-14")), "H/1 H/3");
+        assert_eq!(ids(changed(&before, &after, "2026-11-15")), "");
+        assert_eq!(ids(changed(&after, &after, "2026-11-14")), "");
     }
 
     #[test]

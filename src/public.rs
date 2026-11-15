@@ -54,7 +54,7 @@ pub fn scrub(mut s: Sheet) -> Sheet {
 pub fn public_message(text: &str) -> Option<String> {
     let mut v: Value = serde_json::from_str(text).ok()?;
     let t = v.get("type")?.as_str()?;
-    if !matches!(t, "ops" | "sheet" | "board" | "resync") {
+    if !matches!(t, "ops" | "sheet" | "board" | "resync" | "vttl") {
         return None;
     }
     if let Some(o) = v.as_object_mut() {

@@ -20,7 +20,7 @@ import { computeScore, isByeClub } from './sheet/score';
 import { session } from './session.svelte';
 import { publicClub } from './viewer.svelte';
 import { importOps, keyLabel } from './sheet/vttl';
-import { data, loadMembers, loadCategories, defaultCategory, clubName, memberKey } from './data.svelte';
+import { data, loadMembers, loadCategories, loadMatches, loadPublicMatches, mergeMatchRows, defaultCategory, clubName, memberKey } from './data.svelte';
 import { fromVttl } from './sheet/create';
 import type { Member, MatchRow } from './types';
 
@@ -343,6 +343,8 @@ export const onServerEvent = (l: Listener) => (listeners.add(l), () => listeners
 let socket: WebSocket | null = null;
 let socketPath = '';
 let retry = 0;
+/** How many times the connection of this path opened: a later open is a reconnect. */
+let opens = 0;
 
 /** Opens the live connection: the club's own, or the public one for a spectator. Safe to call again. */
 export function connect() {
@@ -356,6 +358,7 @@ export function connect() {
     old.close();
   }
   if (!path) return;
+  if (socketPath !== path) opens = 0;
   socketPath = path;
   const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${path}`;
   const s = new WebSocket(url);
@@ -364,6 +367,7 @@ export function connect() {
     retry = 0;
     ws.live = true;
     // Catch up on what we missed while away, then send our own changes.
+    if (opens++) catchUpVttl();
     await refreshAll();
     scheduleFlush(0);
   };
@@ -389,7 +393,13 @@ export function connect() {
       // A good upload shows in the top bar and on the match; only a failure gets a message.
       const o = msg as unknown as UploadOutcome;
       if (!o.dryRun && (!o.ok || o.confirmed === false)) ws.message = uploadMessage(o);
+    } else if (msg.type === 'vttl') {
+      // The server found new VTTL data: the match list and the open matches follow.
+      const rows = msg.rows as MatchRow[];
+      mergeMatchRows(publicClub(), msg.season, rows);
+      for (const r of rows) importFromVttl(r.matchId).catch(() => {});
     } else if (msg.type === 'resync') {
+      catchUpVttl();
       refreshAll();
     }
     for (const l of listeners) l(msg);
@@ -447,13 +457,19 @@ const isRecent = (day: string) => {
   return diff > -1 && diff < 2; // today or yesterday
 };
 
-/** ScoreSheet checks away matches every 5 minutes; we check every match of today/yesterday. */
-setInterval(() => {
+/**
+ * The server sends new VTTL data as it finds it ("vttl" message), so there is no timer here.
+ * After a break in the connection we ask once for what we missed: the match list, and the
+ * VTTL data of every match of today and yesterday on this device.
+ */
+function catchUpVttl() {
+  const pub = publicClub();
+  (pub ? loadPublicMatches(pub) : loadMatches()).catch(() => {});
   for (const id of Object.keys(ws.entries)) {
     const s = ws.entries[id]?.view;
     if (s && isRecent(s.day)) importFromVttl(id).catch(() => {});
   }
-}, 5 * 60 * 1000);
+}
 
 // ---------------------------------------------------------------- VTTL: upload
 // The server uploads by itself after every stored change (src/uploader.rs). This is the manual

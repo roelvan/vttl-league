@@ -2,7 +2,7 @@
 // working (and validating) when the hall WiFi drops.
 
 import { api } from './api';
-import type { Club, MatchList, Member, PlayerCategory } from './types';
+import type { Club, MatchList, MatchRow, Member, PlayerCategory } from './types';
 import { menCategory } from './sheet/create';
 
 function load<T>(key: string): T | undefined {
@@ -23,11 +23,13 @@ export const data = $state({
   categories: load<PlayerCategory[]>('vl.cats') ?? [],
   clubs: load<Club[]>('vl.clubs') ?? [],
   matches: load<MatchList>('vl.matches.current') ?? null,
-  /** Match lists of other clubs (public pages), by club id. */
-  publicMatches: {} as Record<string, MatchList & { club: Club | null }>,
+  /** Match lists of other clubs (public pages), by club id. The last one is kept on the device. */
+  publicMatches: {} as Record<string, PublicList>,
   /** "club|category" -> strength list */
   members: load<Record<string, Member[]>>('vl.members') ?? {},
 });
+
+type PublicList = MatchList & { club: Club | null };
 
 export const defaultCategory = () => menCategory(data.categories);
 
@@ -69,10 +71,32 @@ export function loadMatches(season?: number) {
 }
 
 export function loadPublicMatches(club: string) {
+  // The copy on the device shows at once; the server answer replaces it.
+  if (!data.publicMatches[club]) {
+    const kept = load<{ club: string; list: PublicList }>('vl.public');
+    if (kept?.club === club) data.publicMatches[club] = kept.list;
+  }
   return once(`public.${club}`, async () => {
     data.publicMatches[club] = await api.publicClub(club);
+    save('vl.public', { club, list: data.publicMatches[club] });
     return data.publicMatches[club];
   });
+}
+
+/**
+ * New VTTL data from the server (the "vttl" push): replaces the rows of the changed matches.
+ * `club` = the public club on screen, or null for the own club.
+ */
+export function mergeMatchRows(club: string | null, season: number, rows: MatchRow[]) {
+  const list = club ? data.publicMatches[club] : data.matches;
+  if (!list || list.season !== season) return;
+  for (const r of rows) {
+    const i = list.matches.findIndex((m) => m.matchId === r.matchId);
+    if (i >= 0) list.matches[i] = r;
+    else list.matches.push(r);
+  }
+  if (club) save('vl.public', { club, list: $state.snapshot(list) });
+  else save('vl.matches.current', $state.snapshot(list));
 }
 
 export const memberKey = (club: string, category: number) => `${club.replace('-', '').toUpperCase()}|${category}`;

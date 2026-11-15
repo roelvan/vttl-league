@@ -346,6 +346,13 @@ pub async fn match_list(app: &App, creds: Option<&Creds>, season: i64, club: &st
         app.tabt.divisions(creds, season)
     )
     .map_err(ApiError::vttl)?;
+    let rows = match_rows(&matches.iter().collect::<Vec<_>>(), &teams, &divisions, club);
+    Ok(json!({ "season": season, "teams": teams, "matches": rows }))
+}
+
+/// The rows of the match list (the client's `MatchRow`) for matches of a club. Also the
+/// content of the "vttl" push, when the poller finds new data.
+pub fn match_rows(matches: &[&TeamMatch], teams: &[tabt::Team], divisions: &[tabt::Division], club: &str) -> Value {
     let levels: HashMap<i64, i64> = divisions.iter().map(|d| (d.id, d.level)).collect();
     // VTTL lists a match twice when two teams of the club play each other.
     let mut seen = std::collections::HashSet::new();
@@ -368,7 +375,7 @@ pub async fn match_list(app: &App, creds: Option<&Creds>, season: i64, club: &st
             }
         })
         .collect();
-    Ok(json!({ "season": season, "teams": teams, "matches": rows }))
+    json!(rows)
 }
 
 #[derive(Deserialize)]
