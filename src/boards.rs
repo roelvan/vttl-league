@@ -18,7 +18,9 @@ use crate::sheets::{Applied, Op};
 use axum::Json;
 use axum::http::StatusCode;
 use axum::extract::{Query, State};
-use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
+use rumqttc::v5::mqttbytes::QoS;
+use rumqttc::v5::mqttbytes::v5::{Packet, PublishProperties};
+use rumqttc::v5::{AsyncClient, Event, EventLoop, MqttOptions};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -193,6 +195,15 @@ pub enum Decision {
 /// Board player that serves first in a linked match: player 2 = the away player.
 const AWAY_SERVES: u8 = 2;
 
+/// How long the broker keeps the retained names of a board (MQTT 5 Message Expiry Interval).
+/// After this time a board that connects gets no names of a match that ended long ago.
+const CONFIG_EXPIRY_SECS: u32 = 2 * 60 * 60;
+
+/// The MQTT 5 properties of a config message.
+fn config_properties() -> PublishProperties {
+    PublishProperties { message_expiry_interval: Some(CONFIG_EXPIRY_SECS), ..Default::default() }
+}
+
 pub fn decide(link: Option<&Link>, topic_match: &str) -> Decision {
     match link {
         None => Decision::Ignore,
@@ -228,7 +239,8 @@ pub fn parse_topic(topic: &str) -> Option<(&str, &str, &str)> {
 impl Boards {
     /// Connects when MQTT_HOST is set, with MQTT_PORT (default 1883, or 8883 with TLS),
     /// MQTT_TLS (true/false) and MQTT_USER / MQTT_PASSWORD.
-    pub fn connect() -> (Self, Option<rumqttc::EventLoop>) {
+    /// The connection uses MQTT 5: the broker needs it for the expiry of the config messages.
+    pub fn connect() -> (Self, Option<EventLoop>) {
         let env = |k: &str| std::env::var(k).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
         let Some(host) = env("MQTT_HOST") else {
             tracing::warn!("MQTT_HOST not set: scoreboards are off");
@@ -262,6 +274,7 @@ impl Boards {
     }
 
     /// Sends the names to the board (retained, like vttl-api `publishDeviceConfig`).
+    /// The broker drops the retained message after `CONFIG_EXPIRY_SECS`.
     async fn send_names(&self, device: &str, p1: &Names, p2: &Names) -> anyhow::Result<()> {
         let c = self.client.as_ref().ok_or_else(|| anyhow::anyhow!("MQTT is not configured"))?;
         let payload = json!({
@@ -270,7 +283,8 @@ impl Boards {
             "player2FirstName": scoreboard::display_name(&p2.first),
             "player2FamilyName": scoreboard::display_name(&p2.last),
         });
-        c.publish(format!("tabletennis/{device}/config"), QoS::AtLeastOnce, true, payload.to_string()).await?;
+        c.publish_with_properties(format!("tabletennis/{device}/config"), QoS::AtLeastOnce, true, payload.to_string(), config_properties())
+            .await?;
         Ok(())
     }
 
@@ -285,7 +299,7 @@ impl Boards {
 }
 
 /// Runs the MQTT event loop for the life of the server; reconnects on errors.
-pub async fn run(app: Arc<App>, mut eventloop: rumqttc::EventLoop) {
+pub async fn run(app: Arc<App>, mut eventloop: EventLoop) {
     loop {
         match eventloop.poll().await {
             Ok(Event::Incoming(Packet::ConnAck(_))) => {
@@ -297,9 +311,11 @@ pub async fn run(app: Arc<App>, mut eventloop: rumqttc::EventLoop) {
             }
             Ok(Event::Incoming(Packet::Publish(p))) => {
                 // A retained message is an old state the broker kept, not a new update.
+                // MQTT 5 gives the topic as bytes; a topic that is not UTF-8 is not ours.
                 if !p.retain
-                    && let Err(e) = on_publish(&app, &p.topic, &p.payload) {
-                        tracing::warn!(topic = %p.topic, "board update: {e:#}");
+                    && let Ok(topic) = std::str::from_utf8(&p.topic)
+                    && let Err(e) = on_publish(&app, topic, &p.payload) {
+                        tracing::warn!(topic = %topic, "board update: {e:#}");
                     }
             }
             Ok(_) => {}
@@ -494,6 +510,11 @@ mod tests {
         assert_eq!(parse_topic("tabletennis/b1/update"), Some(("b1", "", "update")));
         assert_eq!(parse_topic("tabletennis/b1/config"), Some(("b1", "", "config")));
         assert_eq!(parse_topic("other/b1/update"), None);
+    }
+
+    #[test]
+    fn config_expires_after_two_hours() {
+        assert_eq!(config_properties().message_expiry_interval, Some(7200));
     }
 
     #[test]
