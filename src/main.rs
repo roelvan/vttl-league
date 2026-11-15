@@ -40,9 +40,13 @@ async fn main() -> anyhow::Result<()> {
     let web_dir = PathBuf::from(var("WEB_DIR").unwrap_or_else(|_| "web/dist".into()));
 
     let (boards, mqtt) = boards::Boards::connect();
+    let db = Arc::new(db::Db::open(&database)?);
     let app = Arc::new(App {
-        tabt: tabt::Tabt::new(var("VTTL_ENDPOINT").unwrap_or_else(|_| "https://api.vttl.be/0.7/index.php?s=vttl".into())),
-        db: db::Db::open(&database)?,
+        tabt: tabt::Tabt::new(
+            var("VTTL_ENDPOINT").unwrap_or_else(|_| "https://api.vttl.be/0.7/index.php?s=vttl".into()),
+            Some(db.clone()),
+        ),
+        db,
         crypto: crypto::Crypto::load(var("SECRET_KEY").ok(), &data_dir.join("secret.key"))?,
         cookie_secure: var("COOKIE_SECURE").map(|v| v != "false").unwrap_or(!local),
         events: tokio::sync::broadcast::channel(1024).0,

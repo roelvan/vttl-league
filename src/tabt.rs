@@ -5,13 +5,15 @@
 //!   account (checked on 2026-11-06: ExtendedInformation gives the same fields for
 //!   any club), so all users share one cache.
 //! - Concurrent requests for the same key share one HTTP call.
+//! - Every cached answer also goes to a `Store` (the database), so a restart of the server
+//!   keeps the cache: the first request after a deploy does not wait for VTTL.
 
 use crate::xml::{self, Node, escape};
 use anyhow::{Result, anyhow};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::OnceCell;
 
 const NS: &str = "http://api.frenoy.net/TabTAPI";
@@ -33,12 +35,33 @@ pub struct Tabt {
 struct Inner {
     http: reqwest::Client,
     endpoint: String,
-    cache: Mutex<HashMap<String, (Instant, Slot)>>,
+    /// Key -> (time of the fetch in Unix ms, answer). Wall-clock time, so that an answer from
+    /// the store keeps its age over a restart.
+    cache: Mutex<HashMap<String, (i64, Slot)>>,
+    store: Option<Arc<dyn Store>>,
+}
+
+/// Where the cached answers live over a restart (the database). The key has the request
+/// fields only, never the credentials.
+pub trait Store: Send + Sync {
+    /// (time of the fetch in Unix ms, SOAP response)
+    fn load(&self, key: &str) -> Option<(i64, String)>;
+    fn save(&self, key: &str, at: i64, body: &str);
+    /// Drops every entry whose key contains `needle`.
+    fn remove(&self, needle: &str);
 }
 
 /// After its TTL, a cached answer is still served for this long while a fresh copy loads in
 /// the background (stale-while-revalidate). Only a cold cache makes a user wait for VTTL.
-const STALE_FOR: Duration = Duration::from_secs(24 * 3600);
+pub const STALE_FOR: Duration = Duration::from_secs(30 * 86400);
+
+fn now_ms() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64
+}
+
+fn age(at: i64) -> Duration {
+    Duration::from_millis((now_ms() - at).max(0) as u64)
+}
 
 // ---------------------------------------------------------------- types
 
@@ -246,7 +269,7 @@ pub const TTL_HOUR: Duration = Duration::from_secs(3600);
 pub const TTL_DAY: Duration = Duration::from_secs(86400);
 
 impl Tabt {
-    pub fn new(endpoint: String) -> Self {
+    pub fn new(endpoint: String, store: Option<Arc<dyn Store>>) -> Self {
         Self {
             inner: Arc::new(Inner {
                 http: reqwest::Client::builder()
@@ -256,6 +279,7 @@ impl Tabt {
                     .unwrap(),
                 endpoint,
                 cache: Mutex::new(HashMap::new()),
+                store,
             }),
         }
     }
@@ -269,6 +293,7 @@ impl Tabt {
             return self.inner.fetch(creds, element, &inner).await.map(Arc::new);
         }
         let key = format!("{element}|{inner}");
+        self.warm(&key);
         enum Plan {
             Use(Slot),
             /// Serve this stale value and refresh in the background.
@@ -277,23 +302,23 @@ impl Tabt {
         let plan = {
             let mut cache = self.inner.cache.lock().unwrap();
             match cache.get(&key) {
-                Some((t, s)) if t.elapsed() < ttl => Plan::Use(s.clone()),
-                Some((t, s)) if t.elapsed() < ttl + STALE_FOR && matches!(s.get(), Some(Ok(_))) => {
+                Some((t, s)) if age(*t) < ttl => Plan::Use(s.clone()),
+                Some((t, s)) if age(*t) < ttl + STALE_FOR && matches!(s.get(), Some(Ok(_))) => {
                     let old = s.get().unwrap().as_ref().unwrap().clone();
                     // Keep serving the old value as fresh while one background task refreshes it.
                     let kept: Slot = Arc::new(OnceCell::new_with(Some(Ok(old.clone()))));
-                    cache.insert(key.clone(), (Instant::now(), kept.clone()));
+                    cache.insert(key.clone(), (now_ms(), kept.clone()));
                     let this = self.clone();
                     let creds = creds.cloned();
                     let (k, el, inn) = (key.clone(), element.to_string(), inner.clone());
                     tokio::spawn(async move {
-                        match this.inner.fetch(creds.as_ref(), &el, &inn).await {
+                        match this.inner.fetch_keep(creds.as_ref(), &el, &inn, &k).await {
                             Ok(n) => {
                                 let mut cache = this.inner.cache.lock().unwrap();
                                 // Only replace what we put there (an invalidate may have run).
                                 if cache.get(&k).is_some_and(|(_, s)| Arc::ptr_eq(s, &kept)) {
                                     let new: Slot = Arc::new(OnceCell::new_with(Some(Ok(Arc::new(n)))));
-                                    cache.insert(k, (Instant::now(), new));
+                                    cache.insert(k, (now_ms(), new));
                                 }
                             }
                             // The old value stays for another TTL.
@@ -304,7 +329,7 @@ impl Tabt {
                 }
                 _ => {
                     let s: Slot = Arc::new(OnceCell::new());
-                    cache.insert(key.clone(), (Instant::now(), s.clone()));
+                    cache.insert(key.clone(), (now_ms(), s.clone()));
                     Plan::Use(s)
                 }
             }
@@ -314,7 +339,7 @@ impl Tabt {
             Plan::Use(s) => s,
         };
         let r = slot
-            .get_or_init(|| async { self.inner.fetch(creds, element, &inner).await.map(Arc::new).map_err(|e| e.to_string()) })
+            .get_or_init(|| async { self.inner.fetch_keep(creds, element, &inner, &key).await.map(Arc::new).map_err(|e| e.to_string()) })
             .await
             .clone();
         if r.is_err() {
@@ -327,10 +352,35 @@ impl Tabt {
         r.map_err(|e| anyhow!(e))
     }
 
+    /// Brings the stored answer for `key` into memory, with its real age, when memory has none.
+    fn warm(&self, key: &str) {
+        let Some(store) = &self.inner.store else { return };
+        if self.inner.cache.lock().unwrap().contains_key(key) {
+            return;
+        }
+        let Some((at, body)) = store.load(key) else { return };
+        let Ok(node) = xml::soap_body(&body) else { return };
+        let slot: Slot = Arc::new(OnceCell::new_with(Some(Ok(Arc::new(node)))));
+        self.inner.cache.lock().unwrap().entry(key.to_string()).or_insert((at, slot));
+    }
 }
 
 impl Inner {
     async fn fetch(&self, creds: Option<&Creds>, element: &str, inner: &str) -> Result<Node> {
+        xml::soap_body(&self.post(creds, element, inner).await?)
+    }
+
+    /// A fetch for the cache: a good answer also goes to the store.
+    async fn fetch_keep(&self, creds: Option<&Creds>, element: &str, inner: &str, key: &str) -> Result<Node> {
+        let resp = self.post(creds, element, inner).await?;
+        let node = xml::soap_body(&resp)?;
+        if let Some(store) = &self.store {
+            store.save(key, now_ms(), &resp);
+        }
+        Ok(node)
+    }
+
+    async fn post(&self, creds: Option<&Creds>, element: &str, inner: &str) -> Result<String> {
         let creds = creds
             .map(|c| {
                 format!(
@@ -354,7 +404,7 @@ impl Inner {
             .text()
             .await?;
         tracing::debug!(element, ms = started.elapsed().as_millis() as u64, bytes = resp.len(), "tabt");
-        xml::soap_body(&resp)
+        Ok(resp)
     }
 }
 
@@ -363,6 +413,9 @@ impl Tabt {
     /// Drops every cached entry whose key contains `needle` (e.g. a club id).
     pub fn invalidate(&self, needle: &str) {
         self.inner.cache.lock().unwrap().retain(|k, _| !k.contains(needle));
+        if let Some(store) = &self.inner.store {
+            store.remove(needle);
+        }
     }
 
     pub async fn test(&self, creds: &Creds) -> Result<TestResult> {
@@ -726,7 +779,7 @@ mod tests {
     async fn cache_coalesces_and_serves_stale() {
         use std::sync::atomic::Ordering;
         let (url, hits) = fake_vttl().await;
-        let t = Tabt::new(url);
+        let t = Tabt::new(url, None);
         let ttl = Duration::from_millis(100);
         // Ten parallel requests share one HTTP call.
         let r = futures_util::future::join_all((0..10).map(|_| t.call(None, "X", &[], ttl))).await;
@@ -741,6 +794,35 @@ mod tests {
         assert_eq!(hits.load(Ordering::SeqCst), 2);
         assert_eq!(t.call(None, "X", &[], ttl).await.unwrap().i("V"), 2);
         assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn cache_survives_a_restart() {
+        use std::sync::atomic::Ordering;
+        let (url, hits) = fake_vttl().await;
+        let db: Arc<dyn Store> = Arc::new(crate::db::memory());
+        let ttl = Duration::from_millis(100);
+        let t = Tabt::new(url.clone(), Some(db.clone()));
+        assert_eq!(t.call(None, "X", &[("Club", "WVL154".into())], ttl).await.unwrap().i("V"), 1);
+        tokio::time::sleep(Duration::from_millis(120)).await;
+
+        // A new server: the stored answer comes back at once (it is stale: a refresh follows).
+        let t = Tabt::new(url.clone(), Some(db.clone()));
+        let started = Instant::now();
+        assert_eq!(t.call(None, "X", &[("Club", "WVL154".into())], ttl).await.unwrap().i("V"), 1);
+        assert!(started.elapsed() < Duration::from_millis(20), "stored answer must not wait");
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+
+        // The refresh went to the store too: the next server starts with it, still fresh.
+        let t = Tabt::new(url.clone(), Some(db.clone()));
+        assert_eq!(t.call(None, "X", &[("Club", "WVL154".into())], ttl).await.unwrap().i("V"), 2);
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+
+        // An invalidate also clears the store.
+        t.invalidate("WVL154");
+        let t = Tabt::new(url, Some(db));
+        assert_eq!(t.call(None, "X", &[("Club", "WVL154".into())], ttl).await.unwrap().i("V"), 3);
     }
 
     #[test]

@@ -43,6 +43,12 @@ const MIGRATIONS: &[&str] = &[
     crate::boards::MIGRATION,
     // 5: VTTL log: what started an upload, and the read-back
     crate::uploader::MIGRATION,
+    // 6: the answers of VTTL (src/tabt.rs), so a restart keeps the cache. `at` is Unix ms.
+    "CREATE TABLE vttl_cache(
+        key   TEXT PRIMARY KEY,
+        at    INTEGER NOT NULL,
+        body  TEXT NOT NULL
+     ) WITHOUT ROWID;",
 ];
 
 /// Sessions end after this many seconds without use.
@@ -87,6 +93,9 @@ impl Db {
             tx.commit()?;
             tracing::info!("database migrated to version {}", i + 1);
         }
+        // Answers that are too old to serve (also searches that nobody repeats).
+        let limit = now() * 1000 - crate::tabt::STALE_FOR.as_millis() as i64;
+        conn.execute("DELETE FROM vttl_cache WHERE at < ?1", params![limit])?;
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -153,6 +162,38 @@ impl Db {
             params![account, m, name, club],
         )?;
         account_row(&c, account).map(|a| a.expect("account exists"))
+    }
+}
+
+/// The VTTL cache on disk. A failure here only costs a cache entry, so it is logged, not returned.
+impl crate::tabt::Store for Db {
+    fn load(&self, key: &str) -> Option<(i64, String)> {
+        let c = self.conn.lock().unwrap();
+        c.query_row("SELECT at, body FROM vttl_cache WHERE key = ?1", params![key], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()
+            .unwrap_or_else(|e| {
+                tracing::warn!("vttl cache read: {e}");
+                None
+            })
+    }
+
+    fn save(&self, key: &str, at: i64, body: &str) {
+        let c = self.conn.lock().unwrap();
+        let r = c.execute(
+            "INSERT INTO vttl_cache(key, at, body) VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET at = excluded.at, body = excluded.body",
+            params![key, at, body],
+        );
+        if let Err(e) = r {
+            tracing::warn!("vttl cache write: {e}");
+        }
+    }
+
+    fn remove(&self, needle: &str) {
+        let c = self.conn.lock().unwrap();
+        if let Err(e) = c.execute("DELETE FROM vttl_cache WHERE instr(key, ?1) > 0", params![needle]) {
+            tracing::warn!("vttl cache delete: {e}");
+        }
     }
 }
 

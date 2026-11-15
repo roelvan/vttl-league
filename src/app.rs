@@ -4,11 +4,12 @@ use crate::boards::Boards;
 use crate::crypto::Crypto;
 use crate::db::Db;
 use crate::tabt::Tabt;
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
 pub struct App {
     pub tabt: Tabt,
-    pub db: Db,
+    pub db: Arc<Db>,
     pub crypto: Crypto,
     /// Send the session cookie with the `Secure` flag (off only for local http).
     pub cookie_secure: bool,
