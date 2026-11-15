@@ -3,6 +3,7 @@ mod app;
 mod auth;
 mod boards;
 mod crypto;
+mod poller;
 mod public;
 mod rules;
 mod db;
@@ -10,6 +11,7 @@ mod scoreboard;
 mod sheets;
 mod tabt;
 mod uploader;
+mod when;
 mod xml;
 
 use app::App;
@@ -53,11 +55,13 @@ async fn main() -> anyhow::Result<()> {
         upload_enabled: var("UPLOAD_ENABLED").is_ok_and(|v| v == "true"),
         boards,
         uploads: uploader::Uploads::default(),
+        watchers: poller::Watchers::default(),
     });
     if let Some(eventloop) = mqtt {
         tokio::spawn(boards::run(app.clone(), eventloop));
     }
     tokio::spawn(uploader::run(app.clone()));
+    tokio::spawn(poller::run(app.clone()));
     if app.upload_enabled {
         tracing::warn!("UPLOAD_ENABLED=true: uploads change the LIVE VTTL database");
     }

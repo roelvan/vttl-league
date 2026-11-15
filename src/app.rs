@@ -21,6 +21,8 @@ pub struct App {
     pub boards: Boards,
     /// Server-side uploads to VTTL (debounce and lock per match).
     pub uploads: crate::uploader::Uploads,
+    /// Who follows which club now: the VTTL poller asks more often for a club with watchers.
+    pub watchers: crate::poller::Watchers,
 }
 
 impl App {

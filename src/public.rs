@@ -112,6 +112,7 @@ pub async fn ws(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>, upgrade
 }
 
 async fn run_ws(app: Arc<App>, club: String, mut socket: WebSocket) {
+    let _watching = app.watchers.enter(&club);
     let mut rx = app.events.subscribe();
     let mut ping = tokio::time::interval(std::time::Duration::from_secs(25));
     loop {

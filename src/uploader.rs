@@ -540,8 +540,8 @@ async fn upload_locked(app: &Arc<App>, club: &str, id: &str, source: Source, fir
     tracing::info!(club, id, partial, dry_run, ok = outcome.ok, confirmed = ?outcome.confirmed, account = %outcome.account, source = source.as_str(), "upload");
     if outcome.ok && !dry_run {
         app.db.mark_can_upload(&outcome.account)?;
-        app.tabt.invalidate(club);
-        app.tabt.invalidate(&club.replace('-', ""));
+        // VTTL has new data for this day: get it in the background, nobody waits for it.
+        crate::poller::refresh_day_soon(app, club, stored.season, &stored.day);
     }
     // Record it in the match, so every device shows the VTTL status.
     let ops = record_ops(&s, &outcome, held.as_ref());

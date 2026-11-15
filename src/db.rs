@@ -188,13 +188,6 @@ impl crate::tabt::Store for Db {
             tracing::warn!("vttl cache write: {e}");
         }
     }
-
-    fn remove(&self, needle: &str) {
-        let c = self.conn.lock().unwrap();
-        if let Err(e) = c.execute("DELETE FROM vttl_cache WHERE instr(key, ?1) > 0", params![needle]) {
-            tracing::warn!("vttl cache delete: {e}");
-        }
-    }
 }
 
 fn account_row(c: &Connection, account: &str) -> Result<Option<Account>> {

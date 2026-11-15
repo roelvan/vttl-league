@@ -37,8 +37,31 @@ struct Inner {
     endpoint: String,
     /// Key -> (time of the fetch in Unix ms, answer). Wall-clock time, so that an answer from
     /// the store keeps its age over a restart.
-    cache: Mutex<HashMap<String, (i64, Slot)>>,
+    cache: Mutex<HashMap<String, Entry>>,
     store: Option<Arc<dyn Store>>,
+}
+
+struct Entry {
+    /// When this entry was last found good enough (Unix ms): the TTL counts from here.
+    checked: i64,
+    /// When VTTL gave the answer (Unix ms).
+    fetched: i64,
+    slot: Slot,
+}
+
+impl Entry {
+    fn fresh(slot: Slot) -> Self {
+        let t = now_ms();
+        Self { checked: t, fetched: t, slot }
+    }
+}
+
+fn ready(n: Arc<Node>) -> Slot {
+    Arc::new(OnceCell::new_with(Some(Ok(n))))
+}
+
+fn fields_xml(fields: &[(&str, String)]) -> String {
+    fields.iter().map(|(k, v)| format!("<ns1:{k}>{}</ns1:{k}>", escape(v))).collect()
 }
 
 /// Where the cached answers live over a restart (the database). The key has the request
@@ -47,8 +70,6 @@ pub trait Store: Send + Sync {
     /// (time of the fetch in Unix ms, SOAP response)
     fn load(&self, key: &str) -> Option<(i64, String)>;
     fn save(&self, key: &str, at: i64, body: &str);
-    /// Drops every entry whose key contains `needle`.
-    fn remove(&self, needle: &str);
 }
 
 /// After its TTL, a cached answer is still served for this long while a fresh copy loads in
@@ -265,6 +286,11 @@ pub struct TestResult {
 
 pub const TTL_NONE: Duration = Duration::ZERO;
 pub const TTL_SHORT: Duration = Duration::from_secs(60);
+/// The season of a club (about 800 kB). The poller keeps the match days fresh.
+pub const TTL_SEASON: Duration = Duration::from_secs(600);
+/// A day answer of the poller stays on top of the season for today and this many days back,
+/// minus one. The poller refreshes the season each day, so older day answers are not needed.
+const OVERLAY_DAYS: i64 = 3;
 pub const TTL_HOUR: Duration = Duration::from_secs(3600);
 pub const TTL_DAY: Duration = Duration::from_secs(86400);
 
@@ -285,29 +311,32 @@ impl Tabt {
     }
 
     async fn call(&self, creds: Option<&Creds>, element: &str, fields: &[(&str, String)], ttl: Duration) -> Result<Arc<Node>> {
-        let mut inner = String::new();
-        for (k, v) in fields {
-            inner.push_str(&format!("<ns1:{k}>{}</ns1:{k}>", escape(v)));
-        }
+        self.call_at(creds, element, fields, ttl).await.map(|(_, n)| n)
+    }
+
+    /// As `call`, with the time (Unix ms) at which VTTL gave the answer.
+    async fn call_at(&self, creds: Option<&Creds>, element: &str, fields: &[(&str, String)], ttl: Duration) -> Result<(i64, Arc<Node>)> {
+        let inner = fields_xml(fields);
         if ttl.is_zero() {
-            return self.inner.fetch(creds, element, &inner).await.map(Arc::new);
+            return self.inner.fetch(creds, element, &inner).await.map(|n| (now_ms(), Arc::new(n)));
         }
         let key = format!("{element}|{inner}");
         self.warm(&key);
         enum Plan {
-            Use(Slot),
+            Use(Slot, i64),
             /// Serve this stale value and refresh in the background.
-            Stale(Arc<Node>),
+            Stale(Arc<Node>, i64),
         }
         let plan = {
             let mut cache = self.inner.cache.lock().unwrap();
             match cache.get(&key) {
-                Some((t, s)) if age(*t) < ttl => Plan::Use(s.clone()),
-                Some((t, s)) if age(*t) < ttl + STALE_FOR && matches!(s.get(), Some(Ok(_))) => {
-                    let old = s.get().unwrap().as_ref().unwrap().clone();
+                Some(e) if age(e.checked) < ttl => Plan::Use(e.slot.clone(), e.fetched),
+                Some(e) if age(e.fetched) < STALE_FOR && matches!(e.slot.get(), Some(Ok(_))) => {
+                    let old = e.slot.get().unwrap().as_ref().unwrap().clone();
+                    let fetched = e.fetched;
                     // Keep serving the old value as fresh while one background task refreshes it.
-                    let kept: Slot = Arc::new(OnceCell::new_with(Some(Ok(old.clone()))));
-                    cache.insert(key.clone(), (now_ms(), kept.clone()));
+                    let kept = ready(old.clone());
+                    cache.insert(key.clone(), Entry { checked: now_ms(), fetched, slot: kept.clone() });
                     let this = self.clone();
                     let creds = creds.cloned();
                     let (k, el, inn) = (key.clone(), element.to_string(), inner.clone());
@@ -315,28 +344,27 @@ impl Tabt {
                         match this.inner.fetch_keep(creds.as_ref(), &el, &inn, &k).await {
                             Ok(n) => {
                                 let mut cache = this.inner.cache.lock().unwrap();
-                                // Only replace what we put there (an invalidate may have run).
-                                if cache.get(&k).is_some_and(|(_, s)| Arc::ptr_eq(s, &kept)) {
-                                    let new: Slot = Arc::new(OnceCell::new_with(Some(Ok(Arc::new(n)))));
-                                    cache.insert(k, (now_ms(), new));
+                                // Only replace what we put there (a newer answer may be there).
+                                if cache.get(&k).is_some_and(|e| Arc::ptr_eq(&e.slot, &kept)) {
+                                    cache.insert(k, Entry::fresh(ready(Arc::new(n))));
                                 }
                             }
                             // The old value stays for another TTL.
                             Err(e) => tracing::warn!("background refresh of {el} failed: {e:#}"),
                         }
                     });
-                    Plan::Stale(old)
+                    Plan::Stale(old, fetched)
                 }
                 _ => {
                     let s: Slot = Arc::new(OnceCell::new());
-                    cache.insert(key.clone(), (now_ms(), s.clone()));
-                    Plan::Use(s)
+                    cache.insert(key.clone(), Entry::fresh(s.clone()));
+                    Plan::Use(s, now_ms())
                 }
             }
         };
-        let slot = match plan {
-            Plan::Stale(old) => return Ok(old),
-            Plan::Use(s) => s,
+        let (slot, fetched) = match plan {
+            Plan::Stale(old, fetched) => return Ok((fetched, old)),
+            Plan::Use(s, fetched) => (s, fetched),
         };
         let r = slot
             .get_or_init(|| async { self.inner.fetch_keep(creds, element, &inner, &key).await.map(Arc::new).map_err(|e| e.to_string()) })
@@ -345,11 +373,32 @@ impl Tabt {
         if r.is_err() {
             // Do not keep errors: the next request tries again.
             let mut cache = self.inner.cache.lock().unwrap();
-            if cache.get(&key).is_some_and(|(_, s)| Arc::ptr_eq(s, &slot)) {
+            if cache.get(&key).is_some_and(|e| Arc::ptr_eq(&e.slot, &slot)) {
                 cache.remove(&key);
             }
         }
-        r.map_err(|e| anyhow!(e))
+        r.map(|n| (fetched, n)).map_err(|e| anyhow!(e))
+    }
+
+    /// Asks VTTL now, whatever the cache has, and keeps the answer (the poller).
+    async fn call_fresh(&self, creds: Option<&Creds>, element: &str, fields: &[(&str, String)]) -> Result<Arc<Node>> {
+        let inner = fields_xml(fields);
+        let key = format!("{element}|{inner}");
+        let n = Arc::new(self.inner.fetch_keep(creds, element, &inner, &key).await?);
+        self.inner.cache.lock().unwrap().insert(key, Entry::fresh(ready(n.clone())));
+        Ok(n)
+    }
+
+    /// What the cache or the store has, with the time of its fetch. Never calls VTTL.
+    fn peek(&self, element: &str, fields: &[(&str, String)]) -> Option<(i64, Arc<Node>)> {
+        let key = format!("{element}|{}", fields_xml(fields));
+        self.warm(&key);
+        let cache = self.inner.cache.lock().unwrap();
+        let e = cache.get(&key)?;
+        match e.slot.get() {
+            Some(Ok(n)) => Some((e.fetched, n.clone())),
+            _ => None,
+        }
     }
 
     /// Brings the stored answer for `key` into memory, with its real age, when memory has none.
@@ -360,8 +409,8 @@ impl Tabt {
         }
         let Some((at, body)) = store.load(key) else { return };
         let Ok(node) = xml::soap_body(&body) else { return };
-        let slot: Slot = Arc::new(OnceCell::new_with(Some(Ok(Arc::new(node)))));
-        self.inner.cache.lock().unwrap().entry(key.to_string()).or_insert((at, slot));
+        let e = Entry { checked: at, fetched: at, slot: ready(Arc::new(node)) };
+        self.inner.cache.lock().unwrap().entry(key.to_string()).or_insert(e);
     }
 }
 
@@ -409,14 +458,6 @@ impl Inner {
 }
 
 impl Tabt {
-
-    /// Drops every cached entry whose key contains `needle` (e.g. a club id).
-    pub fn invalidate(&self, needle: &str) {
-        self.inner.cache.lock().unwrap().retain(|k, _| !k.contains(needle));
-        if let Some(store) = &self.inner.store {
-            store.remove(needle);
-        }
-    }
 
     pub async fn test(&self, creds: &Creds) -> Result<TestResult> {
         let r = self.call(Some(creds), "TestRequest", &[], TTL_NONE).await?;
@@ -482,16 +523,52 @@ impl Tabt {
     }
 
     /// All matches of a club in a season (home and away), with details.
+    ///
+    /// The season answer is large, so it is refreshed seldom. On a match day the poller asks
+    /// for the matches of that day only (`refresh_day`): those newer answers go on top here.
     pub async fn club_matches(&self, c: Option<&Creds>, season: i64, club: &str) -> Result<Vec<TeamMatch>> {
-        let r = self
-            .call(
-                c,
-                "GetMatchesRequest",
-                &[("Club", club.into()), ("Season", season.to_string()), ("WithDetails", "true".into())],
-                TTL_SHORT,
-            )
-            .await?;
-        Ok(r.children("TeamMatchesEntries").map(team_match).collect())
+        let (at, r) = self.call_at(c, "GetMatchesRequest", &season_fields(club, season), TTL_SEASON).await?;
+        Ok(self.with_days(at, &r, season, club))
+    }
+
+    /// As `club_matches`, from the cache only: (time of the newest fetch in Unix ms, matches).
+    pub fn club_matches_cached(&self, season: i64, club: &str) -> Option<(i64, Vec<TeamMatch>)> {
+        let (at, r) = self.peek("GetMatchesRequest", &season_fields(club, season))?;
+        Some((at, self.with_days(at, &r, season, club)))
+    }
+
+    fn with_days(&self, at: i64, r: &Node, season: i64, club: &str) -> Vec<TeamMatch> {
+        let mut list: Vec<TeamMatch> = r.children("TeamMatchesEntries").map(team_match).collect();
+        let now = now_ms() / 1000;
+        for back in 0..OVERLAY_DAYS {
+            let day = crate::when::local_day(now - back * 86400);
+            let Some((day_at, d)) = self.peek("GetMatchesRequest", &day_fields(club, season, &day)) else { continue };
+            if day_at <= at {
+                continue;
+            }
+            for m in d.children("TeamMatchesEntries").map(team_match) {
+                // A match between two teams of the club is in the list twice.
+                for old in list.iter_mut().filter(|x| x.match_id == m.match_id) {
+                    *old = m.clone();
+                }
+            }
+        }
+        list
+    }
+
+    /// Gets the season of a club from VTTL now.
+    pub async fn refresh_club_matches(&self, c: Option<&Creds>, season: i64, club: &str) -> Result<()> {
+        self.call_fresh(c, "GetMatchesRequest", &season_fields(club, season)).await.map(|_| ())
+    }
+
+    /// Gets the matches of a club on one day ("2026-11-14") from VTTL now.
+    pub async fn refresh_day(&self, c: Option<&Creds>, season: i64, club: &str, day: &str) -> Result<()> {
+        self.call_fresh(c, "GetMatchesRequest", &day_fields(club, season, day)).await.map(|_| ())
+    }
+
+    /// When `refresh_day` last had an answer for this day (Unix ms).
+    pub fn day_fetched_at(&self, season: i64, club: &str, day: &str) -> Option<i64> {
+        self.peek("GetMatchesRequest", &day_fields(club, season, day)).map(|(at, _)| at)
     }
 
     /// All matches of a division in a season (for the division-day wizard).
@@ -607,6 +684,20 @@ impl Tabt {
     }
 }
 
+fn season_fields(club: &str, season: i64) -> [(&'static str, String); 3] {
+    [("Club", club.into()), ("Season", season.to_string()), ("WithDetails", "true".into())]
+}
+
+fn day_fields(club: &str, season: i64, day: &str) -> [(&'static str, String); 5] {
+    [
+        ("Club", club.into()),
+        ("Season", season.to_string()),
+        ("YearDateFrom", day.into()),
+        ("YearDateTo", day.into()),
+        ("WithDetails", "true".into()),
+    ]
+}
+
 // ---------------------------------------------------------------- parsing
 
 fn venue(n: &Node) -> Venue {
@@ -698,6 +789,12 @@ fn details(d: &Node) -> MatchDetails {
         home_score: d.i("HomeScore"),
         away_score: d.i("AwayScore"),
     }
+}
+
+/// A match from a SOAP answer with one `TeamMatchesEntries` (tests).
+#[cfg(test)]
+pub fn parse_match(soap: &str) -> TeamMatch {
+    team_match(xml::soap_body(soap).unwrap().child("TeamMatchesEntries").unwrap())
 }
 
 pub fn is_bye_club(c: &str) -> bool {
@@ -818,11 +915,51 @@ mod tests {
         let t = Tabt::new(url.clone(), Some(db.clone()));
         assert_eq!(t.call(None, "X", &[("Club", "WVL154".into())], ttl).await.unwrap().i("V"), 2);
         assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
 
-        // An invalidate also clears the store.
-        t.invalidate("WVL154");
-        let t = Tabt::new(url, Some(db));
-        assert_eq!(t.call(None, "X", &[("Club", "WVL154".into())], ttl).await.unwrap().i("V"), 3);
+    /// A fake TabT endpoint for matches: the day request has the score, the season request not.
+    async fn fake_matches() -> String {
+        let app = axum::Router::new().route(
+            "/",
+            axum::routing::post(|body: String| async move {
+                let today = crate::when::local_day(now_ms() / 1000);
+                let entry = |id: &str, score: &str| {
+                    format!("<TeamMatchesEntries><MatchId>{id}</MatchId><Date>{today}</Date><HomeClub>A1</HomeClub><AwayClub>B2</AwayClub><Score>{score}</Score></TeamMatchesEntries>")
+                };
+                let list = if body.contains("YearDateFrom") { entry("M/1", "12-4") } else { entry("M/1", "") + &entry("M/2", "8-8") };
+                format!("<Envelope><Body><R>{list}</R></Body></Envelope>")
+            }),
+        );
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        url
+    }
+
+    #[tokio::test]
+    async fn day_answer_goes_on_top_of_the_season() {
+        let db: Arc<dyn Store> = Arc::new(crate::db::memory());
+        let t = Tabt::new(fake_matches().await, Some(db.clone()));
+        let today = crate::when::local_day(now_ms() / 1000);
+        let scores = |l: Vec<TeamMatch>| l.into_iter().map(|m| format!("{}={}", m.match_id, m.score)).collect::<Vec<_>>().join(" ");
+        assert!(t.club_matches_cached(27, "A1").is_none());
+        assert_eq!(scores(t.club_matches(None, 27, "A1").await.unwrap()), "M/1= M/2=8-8");
+        assert!(t.day_fetched_at(27, "A1", &today).is_none());
+
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        t.refresh_day(None, 27, "A1", &today).await.unwrap();
+        assert!(t.day_fetched_at(27, "A1", &today).is_some());
+        assert_eq!(scores(t.club_matches(None, 27, "A1").await.unwrap()), "M/1=12-4 M/2=8-8");
+        // Also after a restart, and without a call to VTTL.
+        let t = Tabt::new("http://127.0.0.1:9/".into(), Some(db));
+        assert_eq!(scores(t.club_matches_cached(27, "A1").unwrap().1), "M/1=12-4 M/2=8-8");
+
+        // A newer season answer wins from the day answer.
+        let t2 = Tabt::new(fake_matches().await, None);
+        t2.refresh_day(None, 27, "A1", &today).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        t2.refresh_club_matches(None, 27, "A1").await.unwrap();
+        assert_eq!(scores(t2.club_matches(None, 27, "A1").await.unwrap()), "M/1= M/2=8-8");
     }
 
     #[test]
