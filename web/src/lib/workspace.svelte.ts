@@ -386,7 +386,9 @@ export function connect() {
         } else if (msg.rev > e.rev) refresh(msg.id).catch(() => {});
       }
     } else if (msg.type === 'upload' && !publicClub()) {
-      ws.message = uploadMessage(msg as unknown as UploadOutcome);
+      // A good upload shows in the top bar and on the match; only a failure gets a message.
+      const o = msg as unknown as UploadOutcome;
+      if (!o.dryRun && (!o.ok || o.confirmed === false)) ws.message = uploadMessage(o);
     } else if (msg.type === 'resync') {
       refreshAll();
     }
@@ -436,10 +438,7 @@ export async function importFromVttl(id: string) {
     member: (club, n) => memberIn(club, cur.playerCategory, n) ?? memberIn(club, def, n),
     clubName,
   });
-  if (ops.length) {
-    change(id, ops, 'vttl');
-    ws.message = `Gegevens van VTTL binnengehaald voor ${cur.home.name} – ${cur.away.name}`;
-  }
+  if (ops.length) change(id, ops, 'vttl');
 }
 
 const isRecent = (day: string) => {

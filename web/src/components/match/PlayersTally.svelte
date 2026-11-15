@@ -48,7 +48,7 @@
             {/if}
           </td>
           <td><span class="pips">{#each r.pips as p, i (i)}<i class="pip {p}"></i>{/each}</span></td>
-          <td class="wl">{r.wins}–{r.losses}</td>
+          <td class="wl">{r.wins}<span class="sep">-</span>{r.losses}</td>
         </tr>
       {/each}
     </tbody>

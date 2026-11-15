@@ -184,10 +184,13 @@ button.chip { cursor: pointer; }
 .match-tabs { display: flex; gap: 4px; padding: 3px; height: 44px; margin-bottom: -4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); justify-self: start; }
 .match-tabs a { display: flex; align-items: center; text-decoration: none; color: var(--muted); font-weight: 600; padding: 0 16px; border-radius: 8px; }
 .match-tabs a[aria-current='page'] { color: var(--fg); background: var(--surface-2); }
-.sync-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
-.sync-dot.live { background: var(--win); }
-.sync-dot.pending { background: var(--warn); }
-.sync-dot.offline { background: var(--danger); }
+/* Save state: spinner while changes go to the server, check when all is stored. */
+.sync-state { display: grid; place-items: center; width: 20px; height: 20px; flex: none; color: var(--faint); }
+.sync-state.ok { color: var(--win); }
+.sync-state.offline, .sync-state.error { color: var(--danger); }
+.sync-state.idle::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* menu popover */
 .menu-wrap { position: relative; }
@@ -231,7 +234,7 @@ button.chip { cursor: pointer; }
 .big-score { display: flex; align-items: baseline; gap: 6px; font: 700 clamp(52px, 14vw, 84px)/0.9 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .big-score .h { color: var(--home); }
 .big-score .a { color: var(--away-big); }
-.big-score .sep { color: var(--muted); font-weight: 600; font-size: 0.6em; transform: translateY(-0.15em); }
+.big-score .sep { color: var(--muted); font-weight: 600; font-size: 0.6em; transform: translateY(-0.2em); }
 
 .race { padding: 6px 16px 16px; display: grid; gap: 8px; }
 .race-bar { display: grid; gap: 3px; }
@@ -286,11 +289,12 @@ button.chip { cursor: pointer; }
 .mt-head { display: flex; gap: 8px; align-items: center; font: 600 12px/1 var(--font); color: var(--muted); margin-bottom: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
 .mt-head .chip { padding: 3px 7px; font-size: 11px; }
 .mt-rows { display: grid; gap: 6px; min-width: 0; }
-.mt-row { display: grid; grid-template-columns: 3px minmax(0, 1fr) repeat(var(--boxes, 5), 25px) 30px; gap: 3px; align-items: center; }
-.mt-row.bare { grid-template-columns: 3px minmax(0, 1fr); }
-.mt-row .bar { width: 3px; height: 30px; border-radius: 2px; background: var(--home); }
-.mt-row .bar.a { background: var(--away); }
-.mt-name { min-width: 0; display: flex; align-items: center; gap: 6px; padding-left: 7px; }
+.mt-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) repeat(var(--boxes, 5), 25px) 30px; gap: 3px; align-items: center; }
+.mt-row.bare { grid-template-columns: 34px minmax(0, 1fr); }
+/* A double: the two ranks, one above the other. */
+.mt-row .rank-tag.pair { font-size: 10px; line-height: 1.1; align-content: center; }
+.mt-name { min-width: 0; display: flex; align-items: center; gap: 6px; padding-left: 5px; }
+.mt-name .trophy { flex: none; display: grid; color: var(--warn); }
 .mt-name .n { min-width: 0; line-height: 1.15; font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mt-row.lose .n { color: var(--muted); font-weight: 500; }
 .mt-row .c { height: 26px; display: grid; place-items: center; border-radius: 6px; font: 600 16px/1 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--faint); }
@@ -300,7 +304,6 @@ button.chip { cursor: pointer; }
 .mt-row .tot { width: 30px; height: 30px; margin-left: 3px; display: grid; place-items: center; border-radius: 8px; background: var(--surface); font: 700 17px/1 var(--font); font-variant-numeric: tabular-nums; color: var(--muted); }
 .mt-row .tot.lead { background: var(--fg); color: var(--bg); }
 .mt-head .status { white-space: nowrap; }
-.mt .fi { display: inline; }
 
 /* ------------------------------------------------------------------ players tally */
 .tally { width: 100%; border-collapse: collapse; }
@@ -319,8 +322,9 @@ button.chip { cursor: pointer; }
 .tally .pick { width: 100%; padding: 4px 6px; margin: -4px -6px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; min-height: 36px; }
 .tally .pick:hover { background: var(--surface-2); }
 .tally .pick[aria-pressed='true'] { background: var(--fg); color: var(--bg); }
-/* Ring in a darker shade of the tag's own team tint (its ink colour), not black. */
-.tally .pick[aria-pressed='true'] .rank-tag { box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 55%, transparent); }
+/* The selected row is the inverse surface: there the tag is the solid team colour, not the soft tint. */
+.tally .pick[aria-pressed='true'] .rank-tag.h { background: var(--home); color: var(--on-home); }
+.tally .pick[aria-pressed='true'] .rank-tag.a { background: var(--away); color: var(--on-away); }
 .tally td:first-child { width: 100%; }
 .tally .wl { font: 700 18px/1 var(--font); letter-spacing: -0.02em; text-align: right; padding-left: 12px; width: 1%; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pips { display: flex; gap: 3px; justify-content: flex-end; }
@@ -328,6 +332,7 @@ button.chip { cursor: pointer; }
 .pip.w { background: var(--win); border-color: var(--win); }
 .pip.l { background: var(--faint); border-color: var(--faint); opacity: 0.6; }
 .pip.live { border-color: var(--live); border-style: dashed; }
+.tally .wl .sep { color: var(--muted); font-weight: 600; padding: 0 1px; }
 .tally-split { display: grid; gap: 16px; }
 
 .info { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 15px; margin: 0; }
@@ -535,8 +540,10 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   /* The sidebar keeps the shell's 32px bottom gutter, so it does not jump up 32px at the page end.
      Cards fade out at its bottom edge instead of a hard cut. */
   .side-night {
-    display: grid; gap: 12px; align-content: start; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px);
-    max-height: calc(100dvh - 72px - 32px - env(safe-area-inset-top, 0px)); overflow: auto; overscroll-behavior: contain;
+    /* 77px = top bar (8 + 44 + 8 + 1 border) + the shell's 16px top padding: the place where the
+       sidebar already is, so it does not move before it sticks. */
+    display: grid; gap: 12px; align-content: start; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 77px);
+    max-height: calc(100dvh - 77px - 32px - env(safe-area-inset-top, 0px)); overflow: auto; overscroll-behavior: contain;
     padding-bottom: 24px; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
     mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
   }
@@ -565,9 +572,6 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .match-aside > :not(:first-child) { order: 3; }
   .hide-mobile { display: none !important; }
 }
-@media (max-width: 719px) {
-  .mt .fi { display: none; }
-}
 @media (max-width: 599px) {
   .board-main { grid-template-columns: 1fr 1fr; grid-template-areas: 'score score' 'home away'; row-gap: 12px; align-items: start; }
   .board-main .big-score { grid-area: score; justify-content: center; }
@@ -585,6 +589,7 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
 }
 @media (prefers-reduced-motion: reduce) {
   .seg.live, .chip.live::before, .wave, .mini i.live { animation: none; }
+  .spinner { animation-duration: 2.4s; }
 }
 
 /* ------------------------------------------------------------------ scoreboard timeouts, stats */

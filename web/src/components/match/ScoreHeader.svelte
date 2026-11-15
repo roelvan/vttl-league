@@ -27,7 +27,7 @@
       {#if sheet.home.forfeit}<span class="team-sub">Forfait</span>{/if}
     </div>
     <div class="big-score" aria-label="{view.homeWins} tegen {view.awayWins}">
-      <span class="h">{view.homeWins}</span><span class="sep">:</span><span class="a">{view.awayWins}</span>
+      <span class="h">{view.homeWins}</span><span class="sep">-</span><span class="a">{view.awayWins}</span>
     </div>
     <div class="team away">
       <span class="team-tag">Uit</span>

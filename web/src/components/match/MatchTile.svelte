@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GameView, GameSide, Person } from '../../lib/live';
   import type { LiveGame } from '../../lib/boards.svelte';
+  import Icon from '../Icon.svelte';
   import TimeoutBadge from './TimeoutBadge.svelte';
   import TimeoutUsed from './TimeoutUsed.svelte';
 
@@ -54,7 +55,7 @@
   {#if !people.length || !people.some((p) => p.full)}
     <span class="muted">Nog niet opgesteld</span>
   {:else if people.length === 1}
-    {#if people[0].initial}<span class="fi">{`${people[0].initial}\u00a0`}</span>{/if}{people[0].last}
+    {people[0].full}
   {:else}
     {people.map((p) => p.last).join(' / ')}
   {/if}
@@ -62,9 +63,12 @@
 
 {#snippet row(side: GameSide, cls: 'h' | 'a', lead: boolean, idx: 0 | 1)}
   <div class="mt-row" class:lose={game.winner && game.winner !== cls} class:bare={!started}>
-    <span class="bar {cls}"></span>
+    <span class="rank-tag {cls}" class:pair={side.people.length > 1}>
+      {#each side.people.length ? side.people : [null] as p, i (i)}<span>{p?.ranking || '–'}</span>{/each}
+    </span>
     <span class="mt-name">
       <span class="n" title={side.people.map((p) => p.full).join(' / ')}>{@render name(side.people)}</span>
+      {#if game.winner === cls}<span class="trophy"><Icon name="trophy" size={16} /></span>{/if}
       {#if used?.[idx] && !(tmo && tmo.owner === idx + 1)}
         <TimeoutUsed />
       {/if}

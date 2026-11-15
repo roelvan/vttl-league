@@ -2,7 +2,7 @@
   // Line icons from the design (24x24, stroke = currentColor).
   type Name =
     | 'match' | 'night' | 'lineup' | 'sun' | 'moon' | 'more' | 'plus' | 'close' | 'chevron' | 'left' | 'right'
-    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats' | 'edit' | 'trash' | 'rows' | 'columns';
+    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats' | 'edit' | 'trash' | 'rows' | 'columns' | 'trophy';
   let { name, size = 20 }: { name: Name; size?: number } = $props();
 </script>
 
@@ -65,6 +65,8 @@
     <rect x="4" y="4" width="16" height="6" rx="1.5" /><rect x="4" y="14" width="16" height="6" rx="1.5" />
   {:else if name === 'columns'}
     <rect x="3" y="4" width="8" height="6" rx="1.5" /><rect x="13" y="4" width="8" height="6" rx="1.5" /><rect x="3" y="14" width="8" height="6" rx="1.5" /><rect x="13" y="14" width="8" height="6" rx="1.5" />
+  {:else if name === 'trophy'}
+    <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" /><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 20h8" />
   {:else if name === 'refresh'}
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
   {/if}

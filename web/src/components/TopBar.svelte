@@ -7,6 +7,8 @@
   import { ws, pendingCount } from '../lib/workspace.svelte';
   import { publicClub } from '../lib/viewer.svelte';
   import VttlLogo from './VttlLogo.svelte';
+  import { vttlStatus, STATUS_TEXT } from '../lib/sheet/vttl';
+  import { getSystem } from '../lib/sheet/systems';
 
   let {
     matchId,
@@ -30,9 +32,22 @@
   let open = $state(false);
   let wrap: HTMLElement | undefined = $state();
 
-  const sync = $derived(!session.online ? 'offline' : pendingCount() ? 'pending' : ws.live ? 'live' : '');
+  /** Home match on screen whose last upload to VTTL failed. */
+  const uploadFailed = $derived.by(() => {
+    const s = matchActions && matchId ? ws.entries[matchId]?.view : null;
+    return !!s && s.isOfficial && vttlStatus(s, getSystem(s.matchSystemId)) === 'error';
+  });
+  const sync = $derived(
+    !session.online ? 'offline' : pendingCount() || ws.syncing ? 'busy' : uploadFailed ? 'error' : ws.live ? 'ok' : 'idle',
+  );
   const syncText = $derived(
-    !session.online ? 'Geen verbinding: wijzigingen blijven op dit toestel' : pendingCount() ? `${pendingCount()} wijziging(en) nog niet opgeslagen` : ws.live ? 'Live verbonden' : 'Niet live verbonden',
+    {
+      offline: 'Geen verbinding: wijzigingen blijven op dit toestel',
+      busy: 'Wijzigingen opslaan…',
+      error: STATUS_TEXT.error,
+      ok: 'Alle wijzigingen opgeslagen',
+      idle: 'Niet live verbonden',
+    }[sync],
   );
 
   function pick(a: MenuAction) {
@@ -52,7 +67,9 @@
     <a class="brand" href={urls.day(day)} onclick={link}><VttlLogo alt="VTTL: naar de clubavond" width={64} height={28} /></a>
     <span class="spacer"></span>
     {#if datechip}<span class="datechip">{datechip}</span>{/if}
-    {#if session.me && !publicClub()}<span class="sync-dot {sync}" title={syncText} role="img" aria-label={syncText}></span>{/if}
+    {#if session.me && !publicClub()}<span class="sync-state {sync}" title={syncText} role="img" aria-label={syncText}>
+        {#if sync === 'busy'}<span class="spinner"></span>{:else if sync === 'ok'}<Icon name="check" size={16} />{:else if sync !== 'idle'}<Icon name="warn" size={16} />{/if}
+      </span>{/if}
     <button class="btn ghost icon-btn" type="button" onclick={toggleTheme} aria-label="Wissel licht of donker">
       <Icon name={settings.theme === 'dark' ? 'sun' : 'moon'} />
     </button>
