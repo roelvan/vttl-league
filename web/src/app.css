@@ -297,7 +297,7 @@ button.chip { cursor: pointer; }
 .mt-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) repeat(var(--boxes, 5), 25px) 30px; gap: 3px; align-items: center; }
 .mt-row.bare { grid-template-columns: 34px minmax(0, 1fr); }
 /* A double: the two ranks, one above the other. */
-.mt-row .rank-tag.pair { font-size: 10px; line-height: 1.1; align-content: center; }
+.mt-row .rank-tag.pair, .vs .rank-tag.pair { font-size: 10px; line-height: 1.1; align-content: center; }
 .mt-name { min-width: 0; display: flex; align-items: center; gap: 6px; padding-left: 5px; }
 .mt-name .trophy { flex: none; display: grid; color: var(--warn); }
 .mt-name .n { min-width: 0; line-height: 1.15; font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -446,7 +446,7 @@ button.chip { cursor: pointer; }
 .vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; }
 .vs .p { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .vs .p.r { flex-direction: row-reverse; }
-.vs .p .n { font-weight: 650; font-size: 16px; line-height: 1.2; }
+.vs .p .n { font-weight: 650; font-size: 16px; line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
 .vs .p.r .n { text-align: right; }
 .vs .sum { display: flex; gap: 6px; font: 700 34px/1 var(--font); font-variant-numeric: tabular-nums; }
 .vs .sum .h { color: var(--home); }
@@ -535,7 +535,8 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
 @media (min-width: 720px) {
   .tally-split { grid-template-columns: 1fr 1fr; }
   .lineup-cols { grid-template-columns: 1fr 1fr; }
-  .sheet { margin: auto; border-radius: 20px; border-bottom: 1px solid var(--line); padding-bottom: 20px; max-height: calc(100dvh - 48px); }
+  /* Top padding 14px: the close button then sits 10px from the top and 10px from the right. */
+  .sheet { margin: auto; border-radius: 20px; border-bottom: 1px solid var(--line); padding-top: 14px; padding-bottom: 20px; max-height: calc(100dvh - 48px); }
   .grab { display: none; }
 }
 @media (min-width: 1100px) {

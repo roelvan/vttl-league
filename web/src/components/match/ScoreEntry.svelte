@@ -99,7 +99,7 @@
       : gameNotation(result.won, boxes, sys),
   );
 
-  const names = (side: 'home' | 'away') => game[side].people.map((p) => (p.initial ? `${p.initial} ${p.last}` : p.last)).join(' / ') || 'Nog niet opgesteld';
+  const names = (side: 'home' | 'away') => game[side].people.map((p) => p.full).join(' / ') || 'Nog niet opgesteld';
 
   function oninput(i: number, side: 'l' | 'r', e: Event) {
     const inp = e.currentTarget as HTMLInputElement;
@@ -156,11 +156,19 @@
   }
 </script>
 
+<!-- The ranking in the team colour, as on the match cards. A double: the two ranks, one above the other. -->
+{#snippet rank(side: 'home' | 'away', cls: 'h' | 'a')}
+  {@const people = game[side].people}
+  <span class="rank-tag {cls}" class:pair={people.length > 1}>
+    {#each people.length ? people : [null] as p, i (i)}<span>{p?.ranking || '–'}</span>{/each}
+  </span>
+{/snippet}
+
 <Dialog title="Wedstrijd {game.pos}" chip={tableNo ? `Tafel ${tableNo}${boardBusy ? ' · scorebord' : ''}` : game.state === 'final' ? 'Gespeeld' : 'Nog niet begonnen'} onclose={close}>
   <div class="vs">
-    <div class="p"><span class="letter h"></span><span class="n">{names('home')}</span></div>
+    <div class="p">{@render rank('home', 'h')}<span class="n">{names('home')}</span></div>
     <div class="sum" aria-label="{homeSets} tegen {awaySets} in sets"><span class="h">{homeSets}</span><span class="sep">–</span><span class="a">{awaySets}</span></div>
-    <div class="p r"><span class="letter a"></span><span class="n">{names('away')}</span></div>
+    <div class="p r">{@render rank('away', 'a')}<span class="n">{names('away')}</span></div>
   </div>
 
   {#if boardBusy}
