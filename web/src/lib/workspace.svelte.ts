@@ -199,22 +199,32 @@ export async function loadDay(day: string) {
 }
 
 /**
- * Makes sure a match is in the workspace: the stored record from the server, or else a draft
- * made from the VTTL calendar row. Then brings in what VTTL knows (players, results).
+ * Makes sure a match is in the workspace. A match that is not on this device gets a draft from
+ * the VTTL calendar row at once, so the page shows without a wait for the server. Then the
+ * stored record of the server replaces the draft (if there is one), and what VTTL knows
+ * (players, results) comes in.
  */
 export async function ensureMatch(row: MatchRow, season: number) {
   const id = row.matchId;
+  let draftError: unknown;
+  if (!ws.entries[id]) {
+    try {
+      if (!data.categories.length) await loadCategories().catch(() => {});
+      const doc = fromVttl(row, season, data.categories);
+      if (!ws.entries[id]) {
+        ws.entries[id] = { base: doc, rev: 0, view: structuredClone(doc), pending: [], needsCreate: false, draft: true };
+        persist();
+      }
+    } catch (e) {
+      draftError = e; // the stored record can still be there
+    }
+  }
   if (!ws.entries[id] || ws.entries[id].draft) {
     try {
       addStored(await getSheet(id));
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 404) && !(e instanceof OfflineError)) throw e;
-      if (!ws.entries[id]) {
-        if (!data.categories.length) await loadCategories().catch(() => {});
-        const doc = fromVttl(row, season, data.categories);
-        ws.entries[id] = { base: doc, rev: 0, view: structuredClone(doc), pending: [], needsCreate: false, draft: true };
-        persist();
-      }
+      if (!ws.entries[id]) throw draftError ?? e;
     }
   }
   scheduleFlush(0);
