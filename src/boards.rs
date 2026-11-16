@@ -274,14 +274,15 @@ impl Boards {
     }
 
     /// Sends the names to the board (retained, like vttl-api `publishDeviceConfig`).
-    /// The broker drops the retained message after `CONFIG_EXPIRY_SECS`.
+    /// The broker drops the retained message after `CONFIG_EXPIRY_SECS`. The board shows two
+    /// lines per side: line 1 (top) gets `last`, line 2 (bottom) gets `first`.
     async fn send_names(&self, device: &str, p1: &Names, p2: &Names) -> anyhow::Result<()> {
         let c = self.client.as_ref().ok_or_else(|| anyhow::anyhow!("MQTT is not configured"))?;
         let payload = json!({
-            "player1FirstName": scoreboard::display_name(&p1.first),
-            "player1FamilyName": scoreboard::display_name(&p1.last),
-            "player2FirstName": scoreboard::display_name(&p2.first),
-            "player2FamilyName": scoreboard::display_name(&p2.last),
+            "player1NameLine1": scoreboard::display_name(&p1.last),
+            "player1NameLine2": scoreboard::display_name(&p1.first),
+            "player2NameLine1": scoreboard::display_name(&p2.last),
+            "player2NameLine2": scoreboard::display_name(&p2.first),
         });
         c.publish_with_properties(format!("tabletennis/{device}/config"), QoS::AtLeastOnce, true, payload.to_string(), config_properties())
             .await?;

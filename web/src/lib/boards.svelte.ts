@@ -161,11 +161,11 @@ const upper = (s: string) => s.toUpperCase();
 /** Sends the players of a game to the board of its table and links the board to that game. */
 export async function sendToBoard(matchId: string, _sheet: Sheet, table: TableView, game: GameView) {
   if (!table.device) return;
-  // A single: first name + family name. A double: the family name of each player, one per field,
-  // so the board shows both players.
+  // The board shows `last` on its top line and `first` on its bottom line. A single: family name
+  // on top, first name below. A double: the family name of each player, the first player on top.
   const side = (g: GameView['home']) => {
     const [a, b] = g.people;
-    if (g.people.length === 2) return { first: upper(a.last), last: upper(b.last) };
+    if (g.people.length === 2) return { last: upper(a.last), first: upper(b.last) };
     if (g.people.length === 1) return { first: upper(a.full.slice(0, a.full.length - a.last.length).trim()), last: upper(a.last) };
     return { first: '', last: upper(g.people.map((p) => p.last).join('/') || g.label) };
   };
