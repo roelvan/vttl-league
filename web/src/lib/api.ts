@@ -4,7 +4,7 @@
 // While it does, every request gets a redirect or an HTML page instead of our JSON.
 // Those answers are reported as `offline` (kind "portal"), never as data.
 
-import type { Me, Member, ClubInfo, MatchList, TeamMatch, PlayerCategory, MatchSystem, Season, Club } from './types';
+import type { Me, Member, PlayerInfo, ClubInfo, MatchList, TeamMatch, PlayerCategory, MatchSystem, Season, Club } from './types';
 import type { Sheet } from './sheet/types';
 import type { Op } from './sheet/ops';
 import type { Device, BoardState } from './boards.svelte';
@@ -116,6 +116,9 @@ export const api = {
   me: () => request<Me>('GET', '/api/me'),
   setMember: (uniqueIndex: number | null) => request<Me>('POST', '/api/me/member', { uniqueIndex }),
   searchMembers: (name: string) => request<Member[]>('GET', `/api/members/search?q=${encodeURIComponent(name)}`),
+  player: (id: number) => request<PlayerInfo>('GET', `/api/player?id=${id}`),
+  /** Asks the server to get these players from VTTL in the background (it skips the fresh ones). */
+  warmPlayers: (ids: number[]) => request<void>('POST', '/api/players/warm', { ids }),
   seasons: () => request<Season[]>('GET', '/api/seasons'),
   club: (season?: number) => request<ClubInfo>('GET', `/api/club${q(season)}`),
   clubMatches: (season?: number) => request<MatchList>('GET', `/api/club/matches${q(season)}`),
@@ -147,6 +150,8 @@ export const api = {
     request<StoredSheet[]>('GET', `/api/public/sheets?club=${encodeURIComponent(club)}&day=${encodeURIComponent(day)}`),
   publicSheet: (club: string, id: string) => request<StoredSheet>('GET', `/api/public/sheet?club=${encodeURIComponent(club)}&id=${encodeURIComponent(id)}`),
   publicMatch: (club: string, id: string) => request<TeamMatch>('GET', `/api/public/match?club=${encodeURIComponent(club)}&id=${encodeURIComponent(id)}`),
+  /** Null when the server has no data of this player yet: spectators cannot make it ask VTTL. */
+  publicPlayer: (id: number) => request<PlayerInfo | null>('GET', `/api/public/player?id=${id}`),
   publicBoards: (club: string) => request<{ devices: Device[]; states: BoardState[] }>('GET', `/api/public/boards?club=${encodeURIComponent(club)}`),
   sheetOps: (id: string, clientId: string, seq: number, ops: Op[]) =>
     request<{ rev: number; seq: number }>('POST', '/api/sheet/ops', { id, clientId, seq, ops }),

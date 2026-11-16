@@ -152,6 +152,52 @@ pub struct Member {
     pub category: String,
 }
 
+/// One singles game of a player, as VTTL lists it for the ranking.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerResult {
+    /// YYYY-MM-DD
+    pub date: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub ranking: String,
+    pub club: String,
+    pub won: bool,
+    pub sets_for: i64,
+    pub sets_against: i64,
+    /// A tournament game (not interclub).
+    pub tournament: bool,
+}
+
+/// Wins and losses against the opponents of one ranking.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RankCount {
+    pub ranking: String,
+    pub wins: i64,
+    pub losses: i64,
+}
+
+/// One player with the results of the current season (the player widget).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerInfo {
+    pub unique_index: i64,
+    pub first_name: String,
+    pub last_name: String,
+    pub ranking: String,
+    pub club: String,
+    pub elo: Option<i64>,
+    pub wins: i64,
+    pub losses: i64,
+    /// Best ranking first.
+    pub by_rank: Vec<RankCount>,
+    /// The newest games first.
+    pub last: Vec<PlayerResult>,
+    /// When VTTL gave this answer (Unix ms).
+    pub fetched_at: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerCategory {
@@ -293,6 +339,11 @@ pub const TTL_SEASON: Duration = Duration::from_secs(600);
 const OVERLAY_DAYS: i64 = 3;
 pub const TTL_HOUR: Duration = Duration::from_secs(3600);
 pub const TTL_DAY: Duration = Duration::from_secs(86400);
+/// One player with results. Long, to keep the load on VTTL low: a player costs one call per
+/// day at most. The results change after a match only, and then `expire_player` asks sooner.
+pub const TTL_PLAYER: Duration = TTL_DAY;
+/// How many games `PlayerInfo::last` has.
+const LAST_RESULTS: usize = 5;
 
 impl Tabt {
     pub fn new(endpoint: String, store: Option<Arc<dyn Store>>) -> Self {
@@ -411,6 +462,25 @@ impl Tabt {
         let Ok(node) = xml::soap_body(&body) else { return };
         let e = Entry { checked: at, fetched: at, slot: ready(Arc::new(node)) };
         self.inner.cache.lock().unwrap().entry(key.to_string()).or_insert(e);
+    }
+
+    /// Does the cache have an answer that is younger than `ttl` (or a fetch that runs now)?
+    fn is_fresh(&self, element: &str, fields: &[(&str, String)], ttl: Duration) -> bool {
+        let key = format!("{element}|{}", fields_xml(fields));
+        self.warm(&key);
+        self.inner.cache.lock().unwrap().get(&key).is_some_and(|e| age(e.checked) < ttl)
+    }
+
+    /// Makes a cached answer stale: the next request still gets it at once, and starts a
+    /// refresh. In memory only: after a restart the answer has its normal TTL again.
+    fn expire(&self, element: &str, fields: &[(&str, String)]) {
+        let key = format!("{element}|{}", fields_xml(fields));
+        self.warm(&key);
+        if let Some(e) = self.inner.cache.lock().unwrap().get_mut(&key)
+            && matches!(e.slot.get(), Some(Ok(_)))
+        {
+            e.checked = 0;
+        }
     }
 }
 
@@ -631,6 +701,28 @@ impl Tabt {
         Ok(r.children("MemberEntries").next().map(member))
     }
 
+    /// One player with the ELO points and the results of the current season. VTTL gives
+    /// this without a login too (checked on 2026-11-16).
+    pub async fn player(&self, c: Option<&Creds>, unique_index: i64) -> Result<Option<PlayerInfo>> {
+        let (at, r) = self.call_at(c, "GetMembersRequest", &player_fields(unique_index), TTL_PLAYER).await?;
+        Ok(r.children("MemberEntries").next().map(|m| player_info(m, at)))
+    }
+
+    /// Is there an answer for this player, of any age? Never calls VTTL.
+    pub fn has_player(&self, unique_index: i64) -> bool {
+        self.peek("GetMembersRequest", &player_fields(unique_index)).is_some()
+    }
+
+    /// Would `player` answer without a call to VTTL?
+    pub fn player_is_fresh(&self, unique_index: i64) -> bool {
+        self.is_fresh("GetMembersRequest", &player_fields(unique_index), TTL_PLAYER)
+    }
+
+    /// The player has new results at VTTL: the next `player` call starts a refresh.
+    pub fn expire_player(&self, unique_index: i64) {
+        self.expire("GetMembersRequest", &player_fields(unique_index));
+    }
+
     pub async fn player_categories(&self, c: &Creds, season: i64) -> Result<Vec<PlayerCategory>> {
         let r = self
             .call(Some(c), "GetPlayerCategories", &[("Season", season.to_string())], TTL_DAY)
@@ -698,7 +790,59 @@ fn day_fields(club: &str, season: i64, day: &str) -> [(&'static str, String); 5]
     ]
 }
 
+fn player_fields(unique_index: i64) -> [(&'static str, String); 3] {
+    [
+        ("UniqueIndex", unique_index.to_string()),
+        ("RankingPointsInformation", "true".into()),
+        ("WithResults", "true".into()),
+    ]
+}
+
 // ---------------------------------------------------------------- parsing
+
+fn player_info(m: &Node, fetched_at: i64) -> PlayerInfo {
+    // "V" (victory) or "D" (defeat). Anything else is not a played game.
+    let mut results: Vec<PlayerResult> = m
+        .children("ResultEntries")
+        .filter(|r| matches!(r.s("Result").as_str(), "V" | "D"))
+        .map(|r| PlayerResult {
+            date: r.s("Date"),
+            first_name: r.s("FirstName"),
+            last_name: r.s("LastName"),
+            ranking: r.s("Ranking"),
+            club: r.s("Club"),
+            won: r.s("Result") == "V",
+            sets_for: r.i("SetFor"),
+            sets_against: r.i("SetAgainst"),
+            tournament: r.s("CompetitionType") == "T",
+        })
+        .collect();
+    // Stable: the games of one day keep the order of VTTL.
+    results.sort_by(|a, b| a.date.cmp(&b.date));
+    let mut by_rank: Vec<RankCount> = Vec::new();
+    for r in &results {
+        let i = by_rank.iter().position(|x| x.ranking == r.ranking).unwrap_or_else(|| {
+            by_rank.push(RankCount { ranking: r.ranking.clone(), wins: 0, losses: 0 });
+            by_rank.len() - 1
+        });
+        if r.won { by_rank[i].wins += 1 } else { by_rank[i].losses += 1 }
+    }
+    by_rank.sort_by_key(|x| rank_key(&x.ranking));
+    let wins = results.iter().filter(|r| r.won).count() as i64;
+    PlayerInfo {
+        unique_index: m.i("UniqueIndex"),
+        first_name: m.s("FirstName"),
+        last_name: m.s("LastName"),
+        ranking: m.s("Ranking"),
+        club: m.s("Club"),
+        elo: m.children("RankingPointsEntries").find(|e| e.s("MethodName") == "ELO").and_then(|e| e.s("Value").parse().ok()),
+        wins,
+        losses: results.len() as i64 - wins,
+        by_rank,
+        last: results.into_iter().rev().take(LAST_RESULTS).collect(),
+        fetched_at,
+    }
+}
 
 fn venue(n: &Node) -> Venue {
     Venue {
@@ -830,7 +974,6 @@ fn team_match(n: &Node) -> TeamMatch {
 }
 
 /// Sort key for a Belgian ranking, best first: A (A1 before A20), B0 … E6, NG/NC, then unknown.
-#[allow(dead_code)]
 pub fn rank_key(ranking: &str) -> (u8, u32) {
     let r = ranking.trim().to_uppercase();
     if r == "NG" || r == "NC" {
@@ -960,6 +1103,68 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(5)).await;
         t2.refresh_club_matches(None, 27, "A1").await.unwrap();
         assert_eq!(scores(t2.club_matches(None, 27, "A1").await.unwrap()), "M/1= M/2=8-8");
+    }
+
+    #[test]
+    fn player_summary() {
+        let game = |date: &str, rank: &str, result: &str, f: i64, a: i64, kind: &str| {
+            format!("<ResultEntries><Date>{date}</Date><UniqueIndex>1</UniqueIndex><FirstName>AN</FirstName><LastName>{date}{rank}</LastName><Ranking>{rank}</Ranking><Result>{result}</Result><SetFor>{f}</SetFor><SetAgainst>{a}</SetAgainst><CompetitionType>{kind}</CompetitionType><Club>WVL100</Club></ResultEntries>")
+        };
+        let games = [
+            game("2026-09-19", "C2", "V", 3, 1, "C"),
+            game("2026-09-19", "C0", "D", 0, 3, "C"),
+            game("2026-08-30", "D0", "V", 3, 0, "T"),
+            game("2026-09-26", "C2", "D", 2, 3, "C"),
+            game("2026-09-26", "B6", "D", 1, 3, "C"),
+            game("2026-10-03", "C2", "V", 3, 2, "C"),
+            game("2026-10-03", "C0", "V", 3, 0, "C"),
+            // Not a played game.
+            game("2026-10-10", "C0", "", 0, 0, "C"),
+        ]
+        .concat();
+        let x = format!(
+            "<Envelope><Body><R><MemberEntries><UniqueIndex>509740</UniqueIndex><FirstName>JAN</FirstName><LastName>PEETERS</LastName><Ranking>C4</Ranking><Club>WVL129</Club>\
+             <RankingPointsEntries><MethodName>ELO</MethodName><Value>1463</Value></RankingPointsEntries>{games}</MemberEntries></R></Body></Envelope>"
+        );
+        let r = xml::soap_body(&x).unwrap();
+        let p = player_info(r.child("MemberEntries").unwrap(), 42);
+        assert_eq!((p.unique_index, p.ranking.as_str(), p.elo, p.fetched_at), (509740, "C4", Some(1463), 42));
+        assert_eq!((p.wins, p.losses), (4, 3));
+        let ranks: Vec<_> = p.by_rank.iter().map(|x| format!("{} {}-{}", x.ranking, x.wins, x.losses)).collect();
+        assert_eq!(ranks, ["B6 0-1", "C0 1-1", "C2 2-1", "D0 1-0"]);
+        // The newest first; the games of one day keep the order of VTTL, reversed.
+        let last: Vec<_> = p.last.iter().map(|x| x.last_name.as_str()).collect();
+        assert_eq!(last, ["2026-10-03C0", "2026-10-03C2", "2026-09-26B6", "2026-09-26C2", "2026-09-19C0"]);
+        assert!(p.last[0].won && !p.last[0].tournament);
+        assert_eq!((p.last[3].sets_for, p.last[3].sets_against), (2, 3));
+
+        // No ELO entry, no results.
+        let r = xml::soap_body("<Envelope><Body><R><MemberEntries><UniqueIndex>7</UniqueIndex></MemberEntries></R></Body></Envelope>").unwrap();
+        let p = player_info(r.child("MemberEntries").unwrap(), 0);
+        assert_eq!((p.elo, p.wins, p.losses, p.last.len()), (None, 0, 0, 0));
+    }
+
+    #[tokio::test]
+    async fn expired_answer_is_served_and_refreshed() {
+        use std::sync::atomic::Ordering;
+        let (url, hits) = fake_vttl().await;
+        let t = Tabt::new(url, None);
+        let ttl = Duration::from_secs(3600);
+        let f = [("UniqueIndex", "1".to_string())];
+        assert!(!t.is_fresh("X", &f, ttl));
+        // Nothing to expire yet: no call, no entry.
+        t.expire("X", &f);
+        assert_eq!(t.call(None, "X", &f, ttl).await.unwrap().i("V"), 1);
+        assert!(t.is_fresh("X", &f, ttl));
+
+        t.expire("X", &f);
+        assert!(!t.is_fresh("X", &f, ttl));
+        // The old answer comes at once; one refresh runs in the background.
+        assert_eq!(t.call(None, "X", &f, ttl).await.unwrap().i("V"), 1);
+        assert!(t.is_fresh("X", &f, ttl));
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(t.call(None, "X", &f, ttl).await.unwrap().i("V"), 2);
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
     }
 
     #[test]

@@ -542,6 +542,15 @@ async fn upload_locked(app: &Arc<App>, club: &str, id: &str, source: Source, fir
         app.db.mark_can_upload(&outcome.account)?;
         // VTTL has new data for this day: get it in the background, nobody waits for it.
         crate::poller::refresh_day_soon(app, club, stored.season, &stored.day);
+        if !partial {
+            // The match is complete at VTTL: its players have new results. The next look at
+            // a player gets them, without a wait for the TTL of a day.
+            for p in s.home.players.iter().chain(&s.away.players).flatten() {
+                if let Ok(id) = p.computer_number.trim().parse() {
+                    app.tabt.expire_player(id);
+                }
+            }
+        }
     }
     // Record it in the match, so every device shows the VTTL status.
     let ops = record_ops(&s, &outcome, held.as_ref());

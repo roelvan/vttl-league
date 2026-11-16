@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Sheet } from '../../lib/sheet/types';
-  import { tally, type LiveView, type Side, type TallyRow } from '../../lib/live';
+  import { tally, type LiveView, type Person, type Side, type TallyRow } from '../../lib/live';
   import { tone } from '../../lib/viewer.svelte';
+  import Icon from '../Icon.svelte';
 
   let {
     sheet,
@@ -9,6 +10,7 @@
     picked = [],
     ontoggle,
     onhover,
+    oninfo,
     flip = false,
   }: {
     sheet: Sheet;
@@ -19,6 +21,8 @@
     ontoggle?: (r: TallyRow) => void;
     /** Preview one row's games while the pointer or the focus is on it; null when it leaves. */
     onhover?: (r: TallyRow | null) => void;
+    /** Opens the player widget next to `at`. Without it, the rows have no info button. */
+    oninfo?: (at: HTMLElement, p: Person, side: Side) => void;
     /** The own club plays away: the away team comes first, in the home colour. */
     flip?: boolean;
   } = $props();
@@ -39,17 +43,30 @@
           onfocusout={onhover ? () => onhover(null) : undefined}
         >
           <td>
-            {#if ontoggle}
-              <button class="who pick" type="button" aria-pressed={on} onclick={() => ontoggle(r)}>
-                <span class="rank-tag {cls}">{r.person.ranking || '–'}</span>
-                <span class="n">{r.person.full || '–'}</span>
-              </button>
-            {:else}
-              <span class="who">
-                <span class="rank-tag {cls}">{r.person.ranking || '–'}</span>
-                <span class="n">{r.person.full || '–'}</span>
-              </span>
-            {/if}
+            <div class="who-row">
+              {#if ontoggle}
+                <button class="who pick" type="button" aria-pressed={on} onclick={() => ontoggle(r)}>
+                  <span class="rank-tag {cls}">{r.person.ranking || '–'}</span>
+                  <span class="n">{r.person.full || '–'}</span>
+                </button>
+              {:else}
+                <span class="who">
+                  <span class="rank-tag {cls}">{r.person.ranking || '–'}</span>
+                  <span class="n">{r.person.full || '–'}</span>
+                </span>
+              {/if}
+              {#if oninfo && r.person.id}
+                <button
+                  class="who-info"
+                  type="button"
+                  aria-label="Spelerinfo {r.person.full}"
+                  aria-haspopup="dialog"
+                  onclick={(e) => oninfo(e.currentTarget, r.person, side)}
+                >
+                  <Icon name="info" size={18} />
+                </button>
+              {/if}
+            </div>
           </td>
           <td><span class="pips">{#each r.pips as p, i (i)}<i class="pip {p}"></i>{/each}</span></td>
           <td class="wl">{r.wins}<span class="sep">-</span>{r.losses}</td>

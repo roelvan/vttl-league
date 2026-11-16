@@ -99,6 +99,16 @@ pub async fn team_match(State(app): State<Arc<App>>, Query(q): Query<IdQuery>) -
         .ok_or_else(|| ApiError::NotFound(format!("Wedstrijd {} niet gevonden", q.id)))
 }
 
+/// A player for the player widget, or null. Spectators only get a player that the cache
+/// has: a visitor without a login cannot make this server ask VTTL for any member number.
+/// A cached player that is too old does start one refresh (VTTL gives it without a login).
+pub async fn player(State(app): State<Arc<App>>, Query(q): Query<crate::api::PlayerQuery>) -> Result<Json<Option<crate::tabt::PlayerInfo>>, ApiError> {
+    if q.id <= 0 || !app.tabt.has_player(q.id) {
+        return Ok(Json(None));
+    }
+    Ok(Json(app.tabt.player(None, q.id).await.map_err(|e| ApiError::Vttl(e.to_string()))?))
+}
+
 pub async fn boards(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>) -> Result<Json<Value>, ApiError> {
     let club = club_id(&q.club)?;
     let devices: Vec<Device> = app.db.devices(club)?;

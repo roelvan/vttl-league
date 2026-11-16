@@ -279,9 +279,12 @@ button.chip { cursor: pointer; }
 
 /* ------------------------------------------------------------------ match order tiles */
 .order { display: grid; grid-template-columns: minmax(0, 470px); gap: 10px; padding: 0 16px 16px; }
-.mt { display: block; width: 100%; padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.mt { position: relative; display: block; width: 100%; padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
 .mt:not(.static):hover { border-color: var(--faint); }
 .mt.static { cursor: default; }
+/* The button of the tile: it gives the keyboard focus and the name. The pointer goes through
+   it to the tile, so the name keeps its tooltip and the info buttons stay free. */
+.mt-open { position: absolute; inset: 0; padding: 0; border: 0; border-radius: inherit; background: none; pointer-events: none; }
 /* Skeleton tile while the results load: the size of a played game, so nothing moves after. */
 .mt.skel { cursor: default; }
 .sk { display: block; border-radius: 6px; background: var(--line); animation: pulse 1.4s ease-in-out infinite; }
@@ -300,7 +303,7 @@ button.chip { cursor: pointer; }
 .mt-row.bare { grid-template-columns: 34px minmax(0, 1fr); }
 /* A double: the two ranks, one above the other. */
 .mt-row .rank-tag.pair, .vs .rank-tag.pair { font-size: 10px; line-height: 1.1; align-content: center; }
-.mt-name { min-width: 0; display: flex; align-items: center; gap: 6px; padding-left: 5px; }
+.mt-name { min-width: 0; display: flex; align-items: center; gap: 4px; padding-left: 5px; }
 .mt-name .trophy { flex: none; display: grid; color: var(--warn); }
 .mt-name .n { min-width: 0; line-height: 1.15; font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mt-row.lose .n { color: var(--muted); font-weight: 500; }
@@ -340,6 +343,57 @@ button.chip { cursor: pointer; }
 .pip.l { background: var(--faint); border-color: var(--faint); opacity: 0.6; }
 .pip.live { border-color: var(--live); border-style: dashed; }
 .tally .wl .sep { color: var(--muted); font-weight: 600; padding: 0 1px; }
+/* The row: the name (select its games) and the info button (the player widget). */
+.tally .who-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.tally .who-row > .who { flex: 1; min-width: 0; }
+/* No negative margin on the right: there the selected row would go under the info button. */
+.tally .who-row > .pick { width: auto; margin-right: 0; }
+.who-info {
+  position: relative; flex: none; width: 36px; height: 36px; display: grid; place-items: center;
+  border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer;
+}
+/* A 44px touch target around the 36px button. */
+.who-info::before { content: ''; position: absolute; inset: -4px; }
+.who-info:hover { background: var(--surface-2); color: var(--fg); }
+/* In a game tile: as high as the row. The rows are 32px apart, so the touch target is 32px high. */
+.who-info.sm { width: 26px; height: 26px; border-radius: 6px; }
+.who-info.sm::before { inset: -3px -8px; }
+/* On a phone the rank tag of a game tile is the info button. */
+button.rank-tag { position: relative; border: 0; cursor: pointer; }
+button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
+.mt .who-info:hover { background: var(--line); }
+/* The glyph is 16px in a 26px button: pull the button in, so the glyph is 6px from the name and from the next icon. */
+.mt-name .who-info.sm { margin: 0 -3px; }
+
+/* ------------------------------------------------------------------ player widget */
+.pp {
+  position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto;
+  padding: 14px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  font-size: 14px;
+}
+.pp:popover-open { display: grid; gap: 12px; }
+.pp-h { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pp-who { display: grid; min-width: 0; }
+.pp-who .n { font-weight: 700; font-size: 16px; line-height: 1.2; }
+.pp-who .t { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.pp-stats div { background: var(--surface-2); border-radius: var(--r-sm); padding: 8px 10px; }
+.pp-stats dt, .pp h3 { font: 600 11px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.pp-stats dd { margin: 6px 0 0; font: 700 20px/1 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.pp .sep { color: var(--muted); font-weight: 600; padding: 0 1px; }
+.pp ul { list-style: none; margin: -4px 0 0; padding: 0; }
+.pp-ranks { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
+.pp-ranks li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; font-variant-numeric: tabular-nums; }
+.pp .rk { color: var(--muted); font-weight: 600; }
+.pp-ranks .wl { font-weight: 700; }
+.pp-last li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.pp-last li:first-child { border-top: 0; }
+.pp-last .pip { flex: none; }
+.pp-last .n { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-last .sets { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 28px; text-align: right; }
+.pp-note, .pp-foot { margin: 0; color: var(--muted); }
+.pp-foot { font-size: 12px; }
+.pp-load { display: grid; gap: 8px; }
 .tally-split { display: grid; gap: 16px; }
 
 .info { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 15px; margin: 0; }

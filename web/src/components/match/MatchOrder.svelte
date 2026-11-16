@@ -1,6 +1,6 @@
 <script lang="ts">
   import MatchTile from './MatchTile.svelte';
-  import type { LiveView, GameView } from '../../lib/live';
+  import type { LiveView, GameView, Person, Side } from '../../lib/live';
   import type { LiveGame } from '../../lib/boards.svelte';
   import Icon from '../Icon.svelte';
   import { settings, saveSettings } from '../../lib/settings.svelte';
@@ -11,6 +11,7 @@
     live = {},
     timeoutsUsed = {},
     onopen,
+    oninfo,
     only = null,
     focus = null,
     onclearfocus,
@@ -23,6 +24,8 @@
     /** Per game index: [home, away] took their timeout (scoreboard games only). */
     timeoutsUsed?: Record<number, [boolean, boolean]>;
     onopen: (g: GameView) => void;
+    /** Opens the player widget: see MatchTile. */
+    oninfo?: (at: HTMLElement, p: Person, side: Side) => void;
     /** Games of the players picked (clicked) in the Spelers card: only these are shown. Overrides the filter. */
     only?: Set<number> | null;
     /** Games of the player under the pointer in the Spelers card: the others are dimmed. */
@@ -71,7 +74,7 @@
       {/each}
     {:else}
     {#each shown as g (g.index)}
-      <MatchTile dim={!!focus && !focus.has(g.index)} game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} live={live[g.index] ?? null} used={timeoutsUsed[g.index] ?? null} {onopen} {flip} />
+      <MatchTile dim={!!focus && !focus.has(g.index)} game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} live={live[g.index] ?? null} used={timeoutsUsed[g.index] ?? null} {onopen} {oninfo} {flip} />
     {:else}
       <p class="muted">Alle wedstrijden zijn gespeeld.</p>
     {/each}

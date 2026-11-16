@@ -19,6 +19,8 @@ export interface Person {
   /** "J." */
   initial: string;
   ranking: string;
+  /** VTTL member number, when the line-up has it. */
+  id?: number;
 }
 
 export interface GameSide {
@@ -91,7 +93,13 @@ export interface LiveView {
 // ---------------------------------------------------------------- names
 
 /** "DEBRUYNE Jonas" (VTTL sheet style: surname in capitals first) -> parts. */
-export function person(name: string, ranking = ''): Person {
+export function person(name: string, ranking = '', computerNumber = ''): Person {
+  const p = named(name, ranking);
+  const id = Number(computerNumber);
+  return Number.isInteger(id) && id > 0 ? { ...p, id } : p;
+}
+
+function named(name: string, ranking: string): Person {
   const t = name.trim().split(/\s+/).filter(Boolean);
   if (!t.length) return { full: '', last: '', initial: '', ranking };
   let i = 0;
@@ -122,7 +130,7 @@ function slotPeople(sheet: Sheet, sys: MatchSystem, side: Side, slot: number): P
   if (!s) return [];
   if (s.kind === 'single') {
     const p = team.players[s.player];
-    return [person(p?.name ?? '', p?.ranking ?? '')];
+    return [person(p?.name ?? '', p?.ranking ?? '', p?.computerNumber)];
   }
   if (s.kind === 'double') {
     const pair = team.doubles[s.double] ?? '';
@@ -130,7 +138,7 @@ function slotPeople(sheet: Sheet, sys: MatchSystem, side: Side, slot: number): P
       .split('/')
       .map((x) => Number(x) - 1)
       .filter((i) => i >= 0)
-      .map((i) => person(team.players[i]?.name ?? '', team.players[i]?.ranking ?? ''));
+      .map((i) => person(team.players[i]?.name ?? '', team.players[i]?.ranking ?? '', team.players[i]?.computerNumber));
   }
   return [];
 }

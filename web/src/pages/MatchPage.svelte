@@ -3,15 +3,17 @@
   import TableCard from '../components/match/TableCard.svelte';
   import MatchOrder from '../components/match/MatchOrder.svelte';
   import PlayersTally from '../components/match/PlayersTally.svelte';
+  import PlayerPopover from '../components/match/PlayerPopover.svelte';
   import MatchDetails from '../components/match/MatchDetails.svelte';
   import ScoreEntry from '../components/match/ScoreEntry.svelte';
   import StatsDialog from '../components/match/StatsDialog.svelte';
   import Icon from '../components/Icon.svelte';
   import { ws } from '../lib/workspace.svelte';
-  import { liveView, tally, type GameView, type TallyRow } from '../lib/live';
+  import { liveView, tally, type GameView, type Person, type Side, type TallyRow } from '../lib/live';
   import { shortDivision } from '../lib/night';
   import { canEdit } from '../lib/access';
-  import { ownIsAway } from '../lib/viewer.svelte';
+  import { ownIsAway, tone } from '../lib/viewer.svelte';
+  import { warmPlayers } from '../lib/players.svelte';
   import { boardFor, liveGamesFor, playFor, sendToBoard, timeoutsUsedFor } from '../lib/boards.svelte';
   import { link } from '../lib/router.svelte';
   import { urls, type MenuAction } from '../lib/nav';
@@ -36,6 +38,19 @@
   /** The own club plays away: its side comes first and has the home colour. */
   const flip = $derived(!!sheet && ownIsAway(sheet.home.clubId, sheet.away.clubId));
   const editable = $derived(canEdit(sheet) && (row?.isHome ?? true));
+
+  /** The VTTL numbers of the line-up, as text: the server gets these players ready for the player widget. */
+  const lineup = $derived(
+    sheet
+      ? [...sheet.home.players, ...sheet.away.players]
+          .map((p) => Number(p?.computerNumber))
+          .filter((n) => Number.isInteger(n) && n > 0)
+          .join(',')
+      : '',
+  );
+  $effect(() => {
+    if (lineup) warmPlayers(lineup.split(',').map(Number));
+  });
 
   /** The team score that VTTL has, from the match list: known before the results come in. */
   const vttlScore = $derived.by((): [number, number] | null => {
@@ -73,6 +88,13 @@
   });
   const togglePlayer = (r: TallyRow) => (picked = picked.includes(r.key) ? picked.filter((k) => k !== r.key) : [...picked, r.key]);
 
+  /** The player widget: one for the page, opened from the Spelers card and from the game tiles. */
+  let info: ReturnType<typeof PlayerPopover> | undefined = $state();
+  function showInfo(at: HTMLElement, p: Person, side: Side) {
+    if (!sheet || !p.id) return;
+    info?.show(at, { id: p.id, name: p.full, ranking: p.ranking, team: sheet[side].name, cls: tone(side === 'home' ? 'h' : 'a', flip) });
+  }
+
   /** The game whose scoreboard statistics are open. */
   let stats = $state<number | null>(null);
   const statsGame = $derived(stats !== null && view ? view.games[stats] : null);
@@ -85,6 +107,8 @@
     return !!b && b.linkedGame === g.index && g.state !== 'final';
   }
 </script>
+
+<PlayerPopover bind:this={info} />
 
 {#if !sheet || !view}
   <div class="card empty">
@@ -125,11 +149,11 @@
         </section>
       {/if}
 
-      <MatchOrder {view} {flip} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
+      <MatchOrder {view} {flip} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} oninfo={showInfo} />
     </div>
 
     <div class="match-aside">
-      <PlayersTally {sheet} {view} {flip} {picked} ontoggle={togglePlayer} onhover={(r) => (hovered = r?.key ?? null)} />
+      <PlayersTally {sheet} {view} {flip} {picked} ontoggle={togglePlayer} onhover={(r) => (hovered = r?.key ?? null)} oninfo={showInfo} />
       <MatchDetails {sheet} {view} onaction={canPrint ? onaction : undefined} canUpload={editable} />
       {#if editable}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>

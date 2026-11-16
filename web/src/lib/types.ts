@@ -97,6 +97,38 @@ export interface MatchRow {
   games?: string | null;
 }
 
+/** One singles game of a player (src/tabt.rs `PlayerResult`). */
+export interface PlayerResult {
+  /** YYYY-MM-DD */
+  date: string;
+  firstName: string;
+  lastName: string;
+  ranking: string;
+  club: string;
+  won: boolean;
+  setsFor: number;
+  setsAgainst: number;
+  tournament: boolean;
+}
+
+/** One player with the results of the season, for the player widget (src/tabt.rs `PlayerInfo`). */
+export interface PlayerInfo {
+  uniqueIndex: number;
+  firstName: string;
+  lastName: string;
+  ranking: string;
+  club: string;
+  elo: number | null;
+  wins: number;
+  losses: number;
+  /** Wins and losses against the opponents of each ranking, best ranking first. */
+  byRank: { ranking: string; wins: number; losses: number }[];
+  /** The newest games first. */
+  last: PlayerResult[];
+  /** When VTTL gave this (Unix ms). */
+  fetchedAt: number;
+}
+
 export interface MatchList {
   season: number;
   teams: Team[];

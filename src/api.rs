@@ -77,6 +77,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/me", get(me))
         .route("/api/me/member", post(set_member))
         .route("/api/members/search", get(search_members))
+        .route("/api/player", get(player))
+        .route("/api/players/warm", post(warm_players))
         .route("/api/seasons", get(seasons))
         .route("/api/club", get(club))
         .route("/api/club/matches", get(club_matches))
@@ -98,6 +100,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/public/sheets", get(public::sheets))
         .route("/api/public/sheet", get(public::sheet))
         .route("/api/public/match", get(public::team_match))
+        .route("/api/public/player", get(public::player))
         .route("/api/public/boards", get(public::boards))
         .route("/api/public/ws", get(public::ws))
         .with_state(app)
@@ -206,6 +209,61 @@ async fn search_members(State(app): State<Arc<App>>, u: User, Query(q): Query<Se
     let mut v = app.tabt.search_members(&u.creds, q).await.map_err(ApiError::vttl)?;
     v.truncate(100);
     Ok(Json(v))
+}
+
+// ---------------------------------------------------------------- players
+
+#[derive(Deserialize)]
+pub struct PlayerQuery {
+    pub id: i64,
+}
+
+/// One player for the player widget. The answer is at most a day old (`tabt::TTL_PLAYER`);
+/// an older one comes at once and a refresh runs in the background.
+async fn player(State(app): State<Arc<App>>, u: User, Query(q): Query<PlayerQuery>) -> R<tabt::PlayerInfo> {
+    if q.id <= 0 {
+        return Err(ApiError::BadRequest("Ongeldige speler".into()));
+    }
+    app.tabt
+        .player(Some(&u.creds), q.id)
+        .await
+        .map_err(ApiError::vttl)?
+        .map(Json)
+        .ok_or_else(|| ApiError::NotFound(format!("Speler {} niet gevonden", q.id)))
+}
+
+#[derive(Deserialize)]
+struct WarmBody {
+    ids: Vec<i64>,
+}
+
+/// The players of one match, with room for substitutes.
+const WARM_MAX: usize = 16;
+/// Between two player calls to VTTL.
+const WARM_PAUSE: std::time::Duration = std::time::Duration::from_millis(500);
+/// One warm-up at a time for the whole server: VTTL gets the player calls in sequence.
+static WARMING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// A user opened a match: get its players in the background, so the player widget opens
+/// at once. A player with a fresh answer costs no call.
+async fn warm_players(State(app): State<Arc<App>>, u: User, Json(b): Json<WarmBody>) -> StatusCode {
+    let ids: Vec<i64> = b.ids.into_iter().filter(|id| *id > 0).take(WARM_MAX).filter(|id| !app.tabt.player_is_fresh(*id)).collect();
+    if !ids.is_empty() {
+        tokio::spawn(async move {
+            let _one = WARMING.lock().await;
+            for id in ids {
+                // Another warm-up got it while this one waited.
+                if app.tabt.player_is_fresh(id) {
+                    continue;
+                }
+                if let Err(e) = app.tabt.player(Some(&u.creds), id).await {
+                    tracing::warn!(id, "player warm-up: {e:#}");
+                }
+                tokio::time::sleep(WARM_PAUSE).await;
+            }
+        });
+    }
+    StatusCode::NO_CONTENT
 }
 
 // ---------------------------------------------------------------- data
