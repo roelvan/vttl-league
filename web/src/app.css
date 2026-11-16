@@ -239,11 +239,11 @@ button.chip { cursor: pointer; }
 .big-score .sep { color: var(--muted); font-weight: 600; font-size: 0.6em; transform: translateY(-0.2em); }
 
 .race { padding: 6px 16px 16px; display: grid; gap: 8px; }
-.race-bar { display: grid; gap: 3px; }
+.race-bar { display: grid; gap: 6px; }
 .seg { height: 10px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--line); }
 .seg.h { background: var(--home); border-color: transparent; }
 .seg.a { background: var(--away); border-color: transparent; }
-.seg.live { background: transparent; border: 1.5px dashed var(--live); animation: pulse 1.8s ease-in-out infinite; }
+.seg.live { background: transparent; border: 1.5px solid var(--live); animation: pulse 1.8s ease-in-out infinite; }
 .race-legend { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
 .race-legend b { color: var(--fg); font-weight: 700; }
 
@@ -267,7 +267,8 @@ button.chip { cursor: pointer; }
 .gbox { min-width: 0; white-space: nowrap; padding: 8px 4px; border-radius: 8px; background: var(--surface-2); text-align: center; font: 700 17px/1.1 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--muted); }
 .gbox small { display: block; font: 600 12px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
 .gbox .w { color: var(--fg); }
-.gbox.cur { outline: 1.5px dashed var(--live); outline-offset: -1.5px; color: var(--fg); }
+.gbox .sep { color: var(--muted); }
+.gbox.cur { outline: 1.5px solid var(--live); outline-offset: -1.5px; color: var(--fg); }
 .gbox .playing { display: block; font: 700 11px/20px var(--font); letter-spacing: 0.03em; text-transform: uppercase; color: var(--live); }
 .court-idle { padding: 18px 14px; color: var(--muted); font-size: 15px; }
 .court-f { display: grid; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 15px; color: var(--muted); font-weight: 600; margin-top: auto; }
@@ -341,7 +342,7 @@ button.chip { cursor: pointer; }
 .pip { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--faint); }
 .pip.w { background: var(--win); border-color: var(--win); }
 .pip.l { background: var(--faint); border-color: var(--faint); opacity: 0.6; }
-.pip.live { border-color: var(--live); border-style: dashed; }
+.pip.live { border-color: var(--live); }
 .tally .wl .sep { color: var(--muted); font-weight: 600; padding: 0 1px; }
 /* The row: the name (select its games) and the info button (the player widget). */
 .tally .who-row { display: flex; align-items: center; gap: 4px; min-width: 0; }

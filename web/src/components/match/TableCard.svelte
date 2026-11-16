@@ -100,7 +100,7 @@
             {@const [x, y] = flip ? [g.away, g.home] : [g.home, g.away]}
             <span class:w={x.won[k]}>{x.cells[k]}</span>–<span class:w={y.won[k]}>{y.cells[k]}</span>
           {:else if curBox === k && pts}
-            {pts[flip ? 1 : 0]}–{pts[flip ? 0 : 1]}
+            {pts[flip ? 1 : 0]}<span class="sep">–</span>{pts[flip ? 0 : 1]}
           {:else if curBox === k}
             <span class="playing">Bezig</span>
           {:else}
