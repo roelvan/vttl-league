@@ -7,6 +7,7 @@
 //! linked device; the first update after the link fixes the board's own match id, and updates
 //! for any other board match are ignored. When the board match is finished, the server writes
 //! the set scores into the match (the server then uploads it) and removes the link.
+//! The last state of a linked board is also in the database, so a restart of the server keeps it.
 //! Player 1 on the board = home side.
 
 use crate::api::ApiError;
@@ -47,8 +48,11 @@ pub const MIGRATION: &str = "
     );
     ALTER TABLE account ADD COLUMN can_upload INTEGER NOT NULL DEFAULT 0;";
 
+/// The last state of a linked board (JSON of `BoardState`), so a restart keeps it.
+pub const MIGRATION_STATE: &str = "ALTER TABLE board_link ADD COLUMN state TEXT;";
+
 /// What the browsers get for a board (web/src/lib/boards.svelte.ts `BoardState`).
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BoardState {
     pub device: String,
@@ -142,7 +146,7 @@ impl Db {
         self.conn().execute(
             "INSERT INTO board_link(device, club, sheet, game, account, board_match, linked_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6)
              ON CONFLICT(device) DO UPDATE SET club = excluded.club, sheet = excluded.sheet, game = excluded.game,
-               account = excluded.account, board_match = NULL, linked_at = excluded.linked_at",
+               account = excluded.account, board_match = NULL, state = NULL, linked_at = excluded.linked_at",
             params![l.device, l.club, l.sheet, l.game, l.account, db::now()],
         )?;
         Ok(())
@@ -160,6 +164,20 @@ impl Db {
     pub fn set_board_match(&self, device: &str, board_match: &str) -> anyhow::Result<()> {
         self.conn().execute("UPDATE board_link SET board_match = ?2 WHERE device = ?1", params![device, board_match])?;
         Ok(())
+    }
+
+    /// Keeps the last state of a linked board. Does nothing when the board has no link.
+    pub fn save_board_state(&self, s: &BoardState) -> anyhow::Result<()> {
+        self.conn().execute("UPDATE board_link SET state = ?2 WHERE device = ?1", params![s.device, serde_json::to_string(s)?])?;
+        Ok(())
+    }
+
+    /// The kept states of all linked boards. A state that does not parse is skipped.
+    pub fn board_states(&self) -> anyhow::Result<Vec<BoardState>> {
+        let c = self.conn();
+        let mut st = c.prepare("SELECT state FROM board_link WHERE state IS NOT NULL")?;
+        let rows = st.query_map([], |r| r.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?.iter().filter_map(|s| serde_json::from_str(s).ok()).collect())
     }
 
     pub fn unlink_board(&self, device: &str) -> anyhow::Result<()> {
@@ -269,6 +287,13 @@ impl Boards {
         self.live.lock().unwrap().get(device).cloned()
     }
 
+    /// Puts back the states that the database kept (after a restart of the server).
+    pub fn restore(&self, states: Vec<BoardState>) {
+        for s in states {
+            self.set_state(s);
+        }
+    }
+
     fn set_state(&self, s: BoardState) {
         self.live.lock().unwrap().insert(s.device.clone(), s);
     }
@@ -365,6 +390,9 @@ fn on_publish(app: &Arc<App>, topic: &str, payload: &[u8]) -> anyhow::Result<()>
         at,
     };
     app.boards.set_state(state.clone());
+    if !s.finished {
+        app.db.save_board_state(&state)?;
+    }
     app.push(&link.club, json!({ "type": "board", "device": device, "lastSeen": at, "state": state }));
     if s.finished {
         write_result(app, &link, &s)?;
@@ -493,6 +521,7 @@ pub async fn link(State(app): State<Arc<App>>, u: User, Json(b): Json<LinkBody>)
         at: now_ms(),
     };
     app.boards.set_state(state.clone());
+    app.db.save_board_state(&state)?;
     app.push(club, json!({ "type": "board", "device": b.device, "state": state }));
     Ok(Json(state))
 }
@@ -558,5 +587,36 @@ mod tests {
         assert_eq!((l.game, l.board_match), (4, None));
         db.delete_device("W1", "b1").unwrap();
         assert!(db.board_link("b1").unwrap().is_none());
+    }
+
+    #[test]
+    fn the_state_of_a_linked_board_survives_a_restart() {
+        let db = db::memory();
+        let state = BoardState {
+            device: "b1".into(),
+            sheet: Some("s1".into()),
+            game: Some(2),
+            current: (5, 3),
+            games: vec![(11, 7)],
+            server: 1,
+            first_server: 2,
+            points: "0010".into(),
+            duration_ms: 90_000,
+            timeout: Some(Timeout { active: false, owner: 0, p1_used: true, p2_used: false, expired: false, deadline: 0 }),
+            finished: false,
+            at: 7,
+        };
+        // No link: nothing to keep.
+        db.save_board_state(&state).unwrap();
+        assert!(db.board_states().unwrap().is_empty());
+        db.link_board(&link(None)).unwrap();
+        db.save_board_state(&state).unwrap();
+        assert_eq!(db.board_states().unwrap(), vec![state.clone()]);
+        // A new link starts without a state; the end of the link removes it.
+        db.link_board(&link(None)).unwrap();
+        assert!(db.board_states().unwrap().is_empty());
+        db.save_board_state(&state).unwrap();
+        db.unlink_board("b1").unwrap();
+        assert!(db.board_states().unwrap().is_empty());
     }
 }

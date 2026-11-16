@@ -1,9 +1,9 @@
 //! Decoding of the binary `update` payload of the ESP32 scoreboard and derived match state.
 
 use anyhow::{Result, bail};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Timeout {
     pub active: bool,

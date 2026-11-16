@@ -57,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
         uploads: uploader::Uploads::default(),
         watchers: poller::Watchers::default(),
     });
+    app.boards.restore(app.db.board_states()?);
     if let Some(eventloop) = mqtt {
         tokio::spawn(boards::run(app.clone(), eventloop));
     }

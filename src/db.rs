@@ -49,6 +49,8 @@ const MIGRATIONS: &[&str] = &[
         at    INTEGER NOT NULL,
         body  TEXT NOT NULL
      ) WITHOUT ROWID;",
+    // 7: the last state of a linked board, so a restart keeps it
+    crate::boards::MIGRATION_STATE,
 ];
 
 /// Sessions end after this many seconds without use.
