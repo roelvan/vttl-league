@@ -3,6 +3,7 @@
   import TimeoutBadge from './TimeoutBadge.svelte';
   import TimeoutUsed from './TimeoutUsed.svelte';
   import type { TableView, GameView, GameSide, BoardLive } from '../../lib/live';
+  import { tone } from '../../lib/viewer.svelte';
 
   let {
     table,
@@ -12,6 +13,7 @@
     onenter,
     onsend,
     onstats,
+    flip = false,
   }: {
     table: TableView;
     boxes: number;
@@ -21,6 +23,8 @@
     onsend?: (g: GameView) => void;
     /** Opens the statistics of the game on the board. */
     onstats?: (g: GameView) => void;
+    /** The own club plays away: the away player comes first, in the home colour. */
+    flip?: boolean;
   } = $props();
 
   const g = $derived(table.current);
@@ -40,7 +44,7 @@
   {@const lead = setsWon[i] > setsWon[1 - i]}
   {@const used = tmo ? (i === 0 ? tmo.p1Used : tmo.p2Used) : false}
   <div class="prow">
-    <span class="letter {cls}"></span>
+    <span class="letter {tone(cls, flip)}"></span>
     <span class="pname">
       {#if linked}<span class="serve" class:off={board?.server !== cls}></span>{/if}
       <span class="n">{side.people.map((p) => p.full).join(' / ') || 'Nog niet opgesteld'}</span>
@@ -77,20 +81,26 @@
 
   {#if g}
     <div class="rows">
-      {@render prow(g.home, 'h', 0)}
-      {@render prow(g.away, 'a', 1)}
+      {#if flip}
+        {@render prow(g.away, 'a', 1)}
+        {@render prow(g.home, 'h', 0)}
+      {:else}
+        {@render prow(g.home, 'h', 0)}
+        {@render prow(g.away, 'a', 1)}
+      {/if}
     </div>
     <div class="court-games" style="--boxes: {boxes}">
       {#each Array.from({ length: boxes }, (_, k) => k) as k (k)}
         <div class="gbox" class:cur={curBox === k}>
           <small>S{k + 1}</small>
           {#if bsets?.[k]}
-            {@const [a, b] = bsets[k]}
+            {@const [a, b] = flip ? [bsets[k][1], bsets[k][0]] : bsets[k]}
             <span class:w={a > b}>{a}</span>–<span class:w={b > a}>{b}</span>
           {:else if !bsets && (g.home.cells[k] || g.away.cells[k])}
-            <span class:w={g.home.won[k]}>{g.home.cells[k]}</span>–<span class:w={g.away.won[k]}>{g.away.cells[k]}</span>
+            {@const [x, y] = flip ? [g.away, g.home] : [g.home, g.away]}
+            <span class:w={x.won[k]}>{x.cells[k]}</span>–<span class:w={y.won[k]}>{y.cells[k]}</span>
           {:else if curBox === k && pts}
-            {pts[0]}–{pts[1]}
+            {pts[flip ? 1 : 0]}–{pts[flip ? 0 : 1]}
           {:else if curBox === k}
             <span class="playing">Bezig</span>
           {:else}
@@ -105,7 +115,7 @@
   {/if}
 
   <div class="court-f">
-    {#if table.next}<span>Volgende: <b>{names(table.next.home)} – {names(table.next.away)}</b></span>{/if}
+    {#if table.next}<span>Volgende: <b>{names(flip ? table.next.away : table.next.home)} – {names(flip ? table.next.home : table.next.away)}</b></span>{/if}
     {#if g && editable}
       {#if table.device && onsend}
         <div class="btns">

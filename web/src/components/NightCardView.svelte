@@ -4,11 +4,19 @@
   import { link } from '../lib/router.svelte';
   import { boards, deviceAlias } from '../lib/boards.svelte';
   import TimeoutBadge from './match/TimeoutBadge.svelte';
+  import { ownIsAway, tone } from '../lib/viewer.svelte';
 
   let { card, current = false }: { card: NightCard; current?: boolean } = $props();
 
   const r = $derived(card.row);
   const hasScore = $derived(card.homeScore !== null);
+  /** The own club plays away: its team comes first and has the home colour. */
+  const flip = $derived(ownIsAway(r.homeClub, r.awayClub));
+  const teams = $derived.by(() => {
+    const home = { name: r.homeTeam, score: card.homeScore, ours: card.isHome };
+    const away = { name: r.awayTeam, score: card.awayScore, ours: !card.isHome };
+    return flip ? [away, home] : [home, away];
+  });
   const outcomeText = { won: 'Gewonnen', lost: 'Verloren', draw: 'Gelijk' } as const;
   /** Running timeouts on the scoreboards of this match. */
   const timeouts = $derived(
@@ -32,15 +40,16 @@
     {/if}
   </div>
   <div class="tm-mid">
-    <span class="tn {card.isHome ? 'ours' : 'them'}">{r.homeTeam}</span><span class="ts">{hasScore ? card.homeScore : '–'}</span>
-    <span class="tn {card.isHome ? 'them' : 'ours'}">{r.awayTeam}</span><span class="ts">{hasScore ? card.awayScore : '–'}</span>
+    {#each teams as t (t.name)}
+      <span class="tn {t.ours ? 'ours' : 'them'}">{t.name}</span><span class="ts">{hasScore ? t.score : '–'}</span>
+    {/each}
   </div>
   {#each timeouts as s (s.device)}
     <div class="tm-tmo"><span>{deviceAlias(s.device)}</span><TimeoutBadge timeout={s.timeout!} who="{who(s.timeout!.owner)}, {deviceAlias(s.device)}" /></div>
   {/each}
   {#if card.segments.length}
     <div class="mini" style="grid-template-columns: repeat({card.segments.length}, 1fr)">
-      {#each card.segments as s, i (i)}<i class={s}></i>{/each}
+      {#each card.segments as s, i (i)}<i class={tone(s, flip)}></i>{/each}
     </div>
   {/if}
   <div class="tm-top">

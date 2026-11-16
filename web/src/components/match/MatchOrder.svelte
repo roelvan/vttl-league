@@ -14,6 +14,7 @@
     only = null,
     focus = null,
     onclearfocus,
+    flip = false,
   }: {
     view: LiveView;
     /** The results still load: tiles of the same size as the real ones, without content. */
@@ -27,6 +28,8 @@
     /** Games of the player under the pointer in the Spelers card: the others are dimmed. */
     focus?: Set<number> | null;
     onclearfocus?: () => void;
+    /** The own club plays away: see MatchTile. */
+    flip?: boolean;
   } = $props();
 
   let filter = $state<'all' | 'todo'>('all');
@@ -68,7 +71,7 @@
       {/each}
     {:else}
     {#each shown as g (g.index)}
-      <MatchTile dim={!!focus && !focus.has(g.index)} game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} live={live[g.index] ?? null} used={timeoutsUsed[g.index] ?? null} {onopen} />
+      <MatchTile dim={!!focus && !focus.has(g.index)} game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} live={live[g.index] ?? null} used={timeoutsUsed[g.index] ?? null} {onopen} {flip} />
     {:else}
       <p class="muted">Alle wedstrijden zijn gespeeld.</p>
     {/each}

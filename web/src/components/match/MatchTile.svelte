@@ -4,6 +4,7 @@
   import Icon from '../Icon.svelte';
   import TimeoutBadge from './TimeoutBadge.svelte';
   import TimeoutUsed from './TimeoutUsed.svelte';
+  import { tone } from '../../lib/viewer.svelte';
 
   let {
     game,
@@ -13,9 +14,12 @@
     used = null,
     onopen,
     dim = false,
+    flip = false,
   }: {
     /** Not a game of the players picked in the Spelers card. */
     dim?: boolean;
+    /** The own club plays away: the away row comes first, in the home colour. */
+    flip?: boolean;
     /** [home, away] took their timeout; null = no scoreboard data. */
     used?: [boolean, boolean] | null;
     game: GameView;
@@ -43,12 +47,14 @@
     game.state === 'error'
       ? 'score nakijken'
       : game.state === 'final'
-        ? `gespeeld, ${game.home.sets}–${game.away.sets} in sets`
+        ? `gespeeld, ${flip ? `${game.away.sets}–${game.home.sets}` : `${game.home.sets}–${game.away.sets}`} in sets`
         : game.state === 'live'
-          ? `bezig${tableNo ? ` op tafel ${tableNo}` : ''}, ${won[0]}–${won[1]} in sets`
+          ? `bezig${tableNo ? ` op tafel ${tableNo}` : ''}, ${flip ? `${won[1]}–${won[0]}` : `${won[0]}–${won[1]}`} in sets`
           : status.toLowerCase(),
   );
-  const label = $derived(`Wedstrijd ${game.pos}: ${who(game.home)} tegen ${who(game.away)}, ${stateText}`);
+  const label = $derived(
+    `Wedstrijd ${game.pos}: ${flip ? `${who(game.away)} tegen ${who(game.home)}` : `${who(game.home)} tegen ${who(game.away)}`}, ${stateText}`,
+  );
 </script>
 
 {#snippet name(people: Person[])}
@@ -63,7 +69,7 @@
 
 {#snippet row(side: GameSide, cls: 'h' | 'a', lead: boolean, idx: 0 | 1)}
   <div class="mt-row" class:lose={game.winner && game.winner !== cls} class:bare={!started}>
-    <span class="rank-tag {cls}" class:pair={side.people.length > 1}>
+    <span class="rank-tag {tone(cls, flip)}" class:pair={side.people.length > 1}>
       {#each side.people.length ? side.people : [null] as p, i (i)}<span>{p?.ranking || '–'}</span>{/each}
     </span>
     <span class="mt-name">
@@ -113,7 +119,12 @@
     {#if game.state === 'live'}<span class="chip live">Live</span>{:else if !started}<span class="status">{status}</span>{/if}
   </div>
   <div class="mt-rows">
-    {@render row(game.home, 'h', homeLeads, 0)}
-    {@render row(game.away, 'a', awayLeads, 1)}
+    {#if flip}
+      {@render row(game.away, 'a', awayLeads, 1)}
+      {@render row(game.home, 'h', homeLeads, 0)}
+    {:else}
+      {@render row(game.home, 'h', homeLeads, 0)}
+      {@render row(game.away, 'a', awayLeads, 1)}
+    {/if}
   </div>
 </svelte:element>

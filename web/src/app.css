@@ -15,6 +15,8 @@
   --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1.5 1.75 6 6.25l4.5-4.5' fill='none' stroke='%2394a1ba' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   /* --faint is for lines, dots and placeholders only. Text uses --muted (4.5:1 or more). */
   --faint: #5b6884;
+  /* For a member of the club, --home is the own club in every match and --away is the opponent
+     (see ownIsAway). At home that is the same as the Flippr board. Else --home is the home team. */
   /* --home fills bars, slots, large numerals and chart lines. --home-ink is small home text. */
   --home: #d81b12;
   --home-soft: rgba(216, 27, 18, 0.2);

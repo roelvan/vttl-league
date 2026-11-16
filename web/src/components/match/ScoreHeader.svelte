@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Sheet } from '../../lib/sheet/types';
-  import type { LiveView } from '../../lib/live';
+  import type { LiveView, Side } from '../../lib/live';
+  import { tone } from '../../lib/viewer.svelte';
 
   let {
     sheet,
@@ -8,6 +9,7 @@
     week = '',
     division = '',
     score = null,
+    flip = false,
   }: {
     sheet: Sheet;
     view: LiveView;
@@ -15,8 +17,12 @@
     division?: string;
     /** The team score of VTTL, shown while the results of the match still load. */
     score?: [number, number] | null;
+    /** The own club plays away: the away team comes first, in the home colour. */
+    flip?: boolean;
   } = $props();
-  const wins = $derived(score ?? [view.homeWins, view.awayWins]);
+  const official = $derived(score ?? [view.homeWins, view.awayWins]);
+  const wins = $derived(flip ? [official[1], official[0]] : official);
+  const sides = $derived<[Side, Side]>(flip ? ['away', 'home'] : ['home', 'away']);
 
   const n = $derived(view.games.length);
   const segs = $derived(view.games.map((g) => g.winner ?? (g.state === 'live' ? 'live' : '')));
@@ -24,6 +30,15 @@
     sheet.vttlLocked ? 'Gevalideerd' : score ? 'Laden…' : view.complete ? 'Einde' : view.started ? 'live' : sheet.startHour ? `Om ${sheet.startHour}` : 'Nog niet begonnen',
   );
 </script>
+
+<!-- "place" is the side on screen (left = home colour); the tag keeps the real home or away. -->
+{#snippet team(side: Side, place: Side)}
+  <div class="team {place}">
+    <span class="team-tag">{side === 'home' ? 'Thuis' : 'Uit'}</span>
+    <div class="team-name">{sheet[side].name}</div>
+    {#if sheet[side].forfeit}<span class="team-sub">Forfait</span>{/if}
+  </div>
+{/snippet}
 
 <section class="card board" aria-label="Stand van de ploegenwedstrijd">
   <div class="board-meta">
@@ -35,23 +50,15 @@
     {#if status === 'live'}<span class="chip live">Live</span>{:else}<span class="chip" class:win={status === 'Einde'}>{status}</span>{/if}
   </div>
   <div class="board-main">
-    <div class="team home">
-      <span class="team-tag">Thuis</span>
-      <div class="team-name">{sheet.home.name}</div>
-      {#if sheet.home.forfeit}<span class="team-sub">Forfait</span>{/if}
-    </div>
+    {@render team(sides[0], 'home')}
     <div class="big-score" aria-label="{wins[0]} tegen {wins[1]}">
       <span class="h">{wins[0]}</span><span class="sep">-</span><span class="a">{wins[1]}</span>
     </div>
-    <div class="team away">
-      <span class="team-tag">Uit</span>
-      <div class="team-name">{sheet.away.name}</div>
-      {#if sheet.away.forfeit}<span class="team-sub">Forfait</span>{/if}
-    </div>
+    {@render team(sides[1], 'away')}
   </div>
   <div class="race">
     <div class="race-bar" style="grid-template-columns: repeat({n}, 1fr)">
-      {#each segs as s, i (i)}<span class="seg {s}" title="Wedstrijd {i + 1}"></span>{/each}
+      {#each segs as s, i (i)}<span class="seg {tone(s, flip)}" title="Wedstrijd {i + 1}"></span>{/each}
     </div>
   </div>
 </section>

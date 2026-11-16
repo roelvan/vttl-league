@@ -11,6 +11,7 @@
   import { gameResult, setWinner, isEmptySet } from '../../lib/sheet/score';
   import { gameNotation } from '../../lib/sheet/export';
   import { change } from '../../lib/workspace.svelte';
+  import { tone } from '../../lib/viewer.svelte';
 
   let {
     id,
@@ -21,6 +22,7 @@
     boardBusy = false,
     onclose,
     onstats,
+    flip = false,
   }: {
     id: string;
     sheet: Sheet;
@@ -32,6 +34,8 @@
     onclose: () => void;
     /** Set when a scoreboard counted this game: opens its statistics (after a save). */
     onstats?: () => void;
+    /** The own club plays away: the away player comes first, in the home colour. */
+    flip?: boolean;
   } = $props();
 
   const sys = $derived(getSystem(sheet.matchSystemId));
@@ -99,6 +103,9 @@
       : gameNotation(result.won, boxes, sys),
   );
 
+  /** The sides in the order on screen. */
+  const order = $derived<['home' | 'away', 'home' | 'away']>(flip ? ['away', 'home'] : ['home', 'away']);
+  const sets = $derived(flip ? [awaySets, homeSets] : [homeSets, awaySets]);
   const names = (side: 'home' | 'away') => game[side].people.map((p) => p.full).join(' / ') || 'Nog niet opgesteld';
 
   function oninput(i: number, side: 'l' | 'r', e: Event) {
@@ -157,18 +164,39 @@
 </script>
 
 <!-- The ranking in the team colour, as on the match cards. A double: the two ranks, one above the other. -->
-{#snippet rank(side: 'home' | 'away', cls: 'h' | 'a')}
+{#snippet rank(side: 'home' | 'away')}
   {@const people = game[side].people}
-  <span class="rank-tag {cls}" class:pair={people.length > 1}>
+  <span class="rank-tag {tone(side === 'home' ? 'h' : 'a', flip)}" class:pair={people.length > 1}>
     {#each people.length ? people : [null] as p, i (i)}<span>{p?.ranking || '–'}</span>{/each}
   </span>
 {/snippet}
 
+<!-- One set score of a side. "l" is always the home score in the record. -->
+{#snippet box(i: number, b: SetScore, w: (typeof perSet)[number], side: 'home' | 'away')}
+  {@const cls = side === 'home' ? 'h' : 'a'}
+  <input
+    id="g{i}{cls}"
+    inputmode="numeric"
+    maxlength="2"
+    autocomplete="off"
+    aria-label="Set {i + 1} {names(side)}"
+    value={side === 'home' ? b.l : b.r}
+    readonly={readonly}
+    class="{tone(cls, flip)}"
+    class:won={w === side || w === `${side}FF`}
+    class:bad={bad[i]}
+    aria-invalid={bad[i] || undefined}
+    aria-describedby={showError ? 'score-error' : undefined}
+    oninput={(e) => oninput(i, side === 'home' ? 'l' : 'r', e)}
+    onfocus={() => (focus = i)}
+  />
+{/snippet}
+
 <Dialog title="Wedstrijd {game.pos}" chip={tableNo ? `Tafel ${tableNo}${boardBusy ? ' · scorebord' : ''}` : game.state === 'final' ? 'Gespeeld' : 'Nog niet begonnen'} onclose={close}>
   <div class="vs">
-    <div class="p">{@render rank('home', 'h')}<span class="n">{names('home')}</span></div>
-    <div class="sum" aria-label="{homeSets} tegen {awaySets} in sets"><span class="h">{homeSets}</span><span class="sep">–</span><span class="a">{awaySets}</span></div>
-    <div class="p r">{@render rank('away', 'a')}<span class="n">{names('away')}</span></div>
+    <div class="p">{@render rank(order[0])}<span class="n">{names(order[0])}</span></div>
+    <div class="sum" aria-label="{sets[0]} tegen {sets[1]} in sets"><span class="h">{sets[0]}</span><span class="sep">–</span><span class="a">{sets[1]}</span></div>
+    <div class="p r">{@render rank(order[1])}<span class="n">{names(order[1])}</span></div>
   </div>
 
   {#if boardBusy}
@@ -185,40 +213,10 @@
     {#each boxes as b, i (i)}
       {@const w = perSet[i]}
       <div class="gline" class:off={i > decidedAt} onfocusout={(e) => leaveRow(i, e)}>
-        <label for="g{i}h">Set {i + 1}</label>
-        <input
-          id="g{i}h"
-          inputmode="numeric"
-          maxlength="2"
-          autocomplete="off"
-          aria-label="Set {i + 1} {names('home')}"
-          value={b.l}
-          readonly={readonly}
-          class:won={w === 'home' || w === 'homeFF'}
-          class:h={true}
-          class:bad={bad[i]}
-          aria-invalid={bad[i] || undefined}
-          aria-describedby={showError ? 'score-error' : undefined}
-          oninput={(e) => oninput(i, 'l', e)}
-          onfocus={() => (focus = i)}
-        />
+        <label for="g{i}{flip ? 'a' : 'h'}">Set {i + 1}</label>
+        {@render box(i, b, w, flip ? 'away' : 'home')}
         <span class="dash">–</span>
-        <input
-          id="g{i}a"
-          inputmode="numeric"
-          maxlength="2"
-          autocomplete="off"
-          aria-label="Set {i + 1} {names('away')}"
-          value={b.r}
-          readonly={readonly}
-          class:won={w === 'away' || w === 'awayFF'}
-          class:a={true}
-          class:bad={bad[i]}
-          aria-invalid={bad[i] || undefined}
-          aria-describedby={showError ? 'score-error' : undefined}
-          oninput={(e) => oninput(i, 'r', e)}
-          onfocus={() => (focus = i)}
-        />
+        {@render box(i, b, w, flip ? 'home' : 'away')}
       </div>
     {/each}
   </div>

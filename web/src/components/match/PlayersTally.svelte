@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Sheet } from '../../lib/sheet/types';
   import { tally, type LiveView, type Side, type TallyRow } from '../../lib/live';
+  import { tone } from '../../lib/viewer.svelte';
 
   let {
     sheet,
@@ -8,6 +9,7 @@
     picked = [],
     ontoggle,
     onhover,
+    flip = false,
   }: {
     sheet: Sheet;
     view: LiveView;
@@ -17,11 +19,13 @@
     ontoggle?: (r: TallyRow) => void;
     /** Preview one row's games while the pointer or the focus is on it; null when it leaves. */
     onhover?: (r: TallyRow | null) => void;
+    /** The own club plays away: the away team comes first, in the home colour. */
+    flip?: boolean;
   } = $props();
 </script>
 
 {#snippet table(side: Side)}
-  {@const cls = side === 'home' ? 'h' : 'a'}
+  {@const cls = tone(side === 'home' ? 'h' : 'a', flip)}
   <table class="tally">
     <thead><tr><th>{sheet[side].name}</th><th><span class="sr-only">Uitslagen</span></th><th>W–V</th></tr></thead>
     <tbody>
@@ -58,7 +62,7 @@
 <section class="card" aria-label="Spelers">
   <div class="card-h"><h2>Spelers</h2></div>
   <div class="card-b tally-split">
-    {@render table('home')}
-    {@render table('away')}
+    {@render table(flip ? 'away' : 'home')}
+    {@render table(flip ? 'home' : 'away')}
   </div>
 </section>

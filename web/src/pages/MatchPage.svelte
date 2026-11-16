@@ -11,6 +11,7 @@
   import { liveView, tally, type GameView, type TallyRow } from '../lib/live';
   import { shortDivision } from '../lib/night';
   import { canEdit } from '../lib/access';
+  import { ownIsAway } from '../lib/viewer.svelte';
   import { boardFor, liveGamesFor, playFor, sendToBoard, timeoutsUsedFor } from '../lib/boards.svelte';
   import { link } from '../lib/router.svelte';
   import { urls, type MenuAction } from '../lib/nav';
@@ -32,6 +33,8 @@
       return null;
     }
   });
+  /** The own club plays away: its side comes first and has the home colour. */
+  const flip = $derived(!!sheet && ownIsAway(sheet.home.clubId, sheet.away.clubId));
   const editable = $derived(canEdit(sheet) && (row?.isHome ?? true));
 
   /** The team score that VTTL has, from the match list: known before the results come in. */
@@ -92,7 +95,7 @@
     <div class="banner"><Icon name="lock" />VTTL heeft deze uitslag gevalideerd. Niemand kan nog iets wijzigen.</div>
   {/if}
 
-  <ScoreHeader {sheet} {view} score={pending ? vttlScore : null} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series} />
+  <ScoreHeader {sheet} {view} {flip} score={pending ? vttlScore : null} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series} />
 
   <div class="match-grid">
     <div class="match-main">
@@ -112,6 +115,7 @@
               table={t}
               boxes={view.sys.boxes}
               {editable}
+              {flip}
               board={boards[t.index]}
               onenter={(g) => (entry = g.index)}
               onsend={(g) => sendToBoard(matchId, sheet, t, g)}
@@ -121,11 +125,11 @@
         </section>
       {/if}
 
-      <MatchOrder {view} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
+      <MatchOrder {view} {flip} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} />
     </div>
 
     <div class="match-aside">
-      <PlayersTally {sheet} {view} {picked} ontoggle={togglePlayer} onhover={(r) => (hovered = r?.key ?? null)} />
+      <PlayersTally {sheet} {view} {flip} {picked} ontoggle={togglePlayer} onhover={(r) => (hovered = r?.key ?? null)} />
       <MatchDetails {sheet} {view} onaction={canPrint ? onaction : undefined} canUpload={editable} />
       {#if editable}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
@@ -144,6 +148,7 @@
       {sheet}
       game={entryGame}
       {editable}
+      {flip}
       tableNo={tableOf(entryGame)?.no ?? null}
       boardBusy={boardBusy(entryGame)}
       onclose={() => (entry = null)}
