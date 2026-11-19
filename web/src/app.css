@@ -399,15 +399,15 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
 
 .info { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 15px; margin: 0; }
 .info dt { color: var(--muted); font-weight: 500; }
-.info dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
-.info dd.with-icon { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.info dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+/* The icon stays on the first line of the text, also when the text wraps. */
+.info dd.with-icon { display: flex; gap: 6px; align-items: flex-start; }
+.info dd.with-icon .vttl-icon { margin-top: calc((1lh - 18px) / 2); }
 /* Buttons keep their label on one line and wrap to a new row when the column is narrow. */
 .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .detail-actions .btn { flex: 1 1 auto; padding: 8px 12px; font-size: 14px; gap: 6px; white-space: nowrap; }
 
 .prep { display: flex; gap: 14px; align-items: center; padding: 16px; text-decoration: none; color: inherit; }
-.prep .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--surface-2); display: grid; place-items: center; flex: none; }
-.prep .ico svg { width: 22px; height: 22px; }
 .prep p { margin: 2px 0 0; color: var(--muted); font-size: 15px; }
 .prep .t { font: 700 18px/1.1 var(--font); letter-spacing: -0.02em; }
 

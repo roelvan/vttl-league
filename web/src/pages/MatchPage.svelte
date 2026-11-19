@@ -127,8 +127,7 @@
         <!-- The results are on their way: no tables or line-up card that go away again. -->
       {:else if editable && !view.started}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
-          <span class="ico"><Icon name="lineup" size={22} /></span>
-          <span><span class="t">Opstelling en scoreborden</span><p>Kies de spelers en de scoreborden. Daarna start de avond.</p></span>
+          <span class="t">Opstelling en scoreborden</span>
           <span class="spacer"></span>
           <Icon name="chevron" />
         </a>
@@ -154,11 +153,10 @@
 
     <div class="match-aside">
       <PlayersTally {sheet} {view} {flip} {picked} ontoggle={togglePlayer} onhover={(r) => (hovered = r?.key ?? null)} oninfo={showInfo} />
-      <MatchDetails {sheet} {view} onaction={canPrint ? onaction : undefined} canUpload={editable} />
+      <MatchDetails {sheet} {view} onaction={canPrint ? onaction : undefined} canUpload={editable} division={row?.divisionName ?? ''} />
       {#if editable}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>
-          <span class="ico"><Icon name="lineup" size={22} /></span>
-          <span><span class="t">Opstelling &amp; scoreborden</span><p>{view.started ? 'Wijzigen kan nog, met een waarschuwing.' : 'Vul in voor wedstrijd 1.'}</p></span>
+          <span><span class="t">Opstelling en scoreborden</span><p>{view.started ? 'Wijzigen kan nog, met een waarschuwing.' : 'Vul in voor wedstrijd 1.'}</p></span>
           <span class="spacer"></span>
           <Icon name="chevron" />
         </a>

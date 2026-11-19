@@ -174,7 +174,6 @@
       <div class="view-night-only view"><ClubNight {day} {rows} loaded={!!list} currentId={ws.current} /></div>
       <div class="card empty hide-mobile">
         <h2>Kies een wedstrijd</h2>
-        <p>Kies links een wedstrijd van de clubavond om ze live te volgen.</p>
       </div>
     {:else if m.section === 'match' && m.id}
       <MatchTabs section="match" matchId={m.id} />

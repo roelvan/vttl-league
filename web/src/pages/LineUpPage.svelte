@@ -85,7 +85,7 @@
     </div>
     <div class="card-h"><h2>Opstelling en scoreborden</h2></div>
     <p class="hint">
-      Kies de spelers van beide ploegen en een scorebord per tafel. De spelers staan in volgorde van klassement, zoals op het VTTL-blad. De {view.games.length} wedstrijden volgen daaruit.
+      De spelers staan in volgorde van klassement, zoals op het VTTL-blad. De {view.games.length} wedstrijden volgen daaruit.
     </p>
   </section>
 

@@ -18,12 +18,15 @@
     view,
     onaction,
     canUpload = false,
+    division = '',
   }: {
     sheet: Sheet;
     view: LiveView;
     /** Set for home-club members: shows the print buttons. */
     onaction?: (a: MenuAction) => void;
     canUpload?: boolean;
+    /** The VTTL name of the division, e.g. "BEKER WVL Heren - Prov. West-Vl. - Heren". */
+    division?: string;
   } = $props();
 
   const status = $derived(sheet.isOfficial ? vttlStatus(sheet, view.sys) : null);
@@ -61,6 +64,7 @@
   <div class="card-h"><h2>Wedstrijdgegevens</h2></div>
   <div class="card-b">
     <dl class="info">
+      {#if division}<dt>Competitie</dt><dd>{division}</dd>{/if}
       <dt>Zaal</dt><dd>{sheet.address.split('\n').join(', ') || '–'}</dd>
       <dt>Aanvang</dt><dd>{sheet.startHour || '–'}{sheet.endHour ? ` · einde ${sheet.endHour}` : ''}</dd>
       <dt>Tafels</dt><dd>{view.tables.map((t) => `${t.no}: ${t.device ? deviceAlias(t.device) : 'manueel'}`).join(' · ')}</dd>
