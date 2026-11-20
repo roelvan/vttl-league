@@ -55,7 +55,7 @@ pub fn decode(p: &[u8]) -> Result<MatchState> {
     let best_of = p[4];
     // Any best-of the board can play (1, 3, 5, 7). Whether it is the format of the linked
     // match is checked by the caller, which knows the match system.
-    if best_of == 0 || best_of % 2 == 0 {
+    if best_of.is_multiple_of(2) {
         bail!("unknown match type {best_of}");
     }
     let meta = p[5];

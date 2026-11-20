@@ -213,6 +213,22 @@ pub enum Decision {
 /// Board player that serves first in a linked match: player 2 = the away player.
 const AWAY_SERVES: u8 = 2;
 
+/// Points of a set on the scoreboard: its table tennis rules count to 11 and nothing else.
+const BOARD_SET_POINTS: u32 = 11;
+
+/// A scoreboard can only count a match whose sets go to 11 points. The old match systems
+/// (sets to 21) would get 11-point scores in a 21-point sheet, so they get no board.
+/// A match without a known system is not refused: nothing says its sets are different.
+pub fn board_can_count(doc: &Value) -> Result<(), String> {
+    match doc["matchSystemId"].as_i64().and_then(crate::rules::system) {
+        Some(sys) if sys.point_count != BOARD_SET_POINTS => Err(format!(
+            "Het scorebord telt sets tot {BOARD_SET_POINTS} punten. Deze wedstrijd speelt sets tot {} punten: vul de uitslag met de hand in.",
+            sys.point_count
+        )),
+        _ => Ok(()),
+    }
+}
+
 /// Best-of of game `game` of a match: the league decides it, not the board. It is the number
 /// of set boxes of the match system (3 sets to win = best of 5); a match without a known
 /// system falls back to the boxes that are on the sheet, then to best of 5.
@@ -519,6 +535,9 @@ pub async fn link(State(app): State<Arc<App>>, u: User, Json(b): Json<LinkBody>)
     if b.game < 0 || b.game as usize >= sheet.doc["results"].as_array().map(|a| a.len()).unwrap_or(0) {
         return Err(ApiError::BadRequest("Ongeldige wedstrijd".into()));
     }
+    // Before anything goes to the board: names on a board that cannot count the match
+    // would only mislead the players.
+    board_can_count(&sheet.doc).map_err(ApiError::BadRequest)?;
     app.boards.send_names(&b.device, &b.player1, &b.player2).await.map_err(|e| ApiError::BadRequest(format!("Scorebord: {e}")))?;
     // The away player (player 2) always serves first.
     app.boards.start_match(&b.device, AWAY_SERVES, best_of(&sheet.doc, b.game)).await.map_err(|e| ApiError::BadRequest(format!("Scorebord: {e}")))?;
@@ -556,6 +575,28 @@ mod tests {
 
     fn link(m: Option<&str>) -> Link {
         Link { device: "b1".into(), club: "W1".into(), sheet: "S/1".into(), game: 3, account: "jan".into(), board_match: m.map(String::from) }
+    }
+
+    #[test]
+    fn a_board_counts_only_sets_to_11() {
+        // the current systems: sets to 11
+        for id in [2, 4, 5, 6, 9, -2] {
+            assert_eq!(board_can_count(&json!({ "matchSystemId": id })), Ok(()), "system {id}");
+        }
+        // the old systems 1 and 3: sets to 21
+        for id in [1, 3] {
+            let e = board_can_count(&json!({ "matchSystemId": id })).unwrap_err();
+            assert!(e.contains("21 punten") && e.contains("11 punten"), "{e}");
+        }
+        // no system, or one the server does not know: not refused
+        assert_eq!(board_can_count(&json!({})), Ok(()));
+        assert_eq!(board_can_count(&json!({ "matchSystemId": 999 })), Ok(()));
+        // every system of the server is covered by one of the two cases
+        for id in -5..40 {
+            if let Some(sys) = crate::rules::system(id) {
+                assert_eq!(board_can_count(&json!({ "matchSystemId": id })).is_ok(), sys.point_count == 11, "system {id}");
+            }
+        }
     }
 
     #[test]
