@@ -25,7 +25,7 @@ export interface NightCard {
   isHome: boolean;
   homeScore: number | null;
   awayScore: number | null;
-  /** One entry per game: who won it, or live. Empty when unknown (away match: VTTL only). */
+  /** One entry per game: who won it, or live. Empty when the match system is unknown. */
   segments: ('h' | 'a' | 'live' | '')[];
   played: number;
   total: number;
@@ -105,6 +105,10 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined, known: Sheet 
       segments = Array.from({ length: Math.max(total, played, order.length) }, (_, i) =>
         order ? (order[i] === 'h' ? 'h' : order[i] === 'a' ? 'a' : '') : i < s[0] ? 'h' : i < played ? 'a' : '',
       );
+    } else {
+      // No score yet: 0–0 and one empty segment per game, as for a home match that did not start.
+      homeScore = awayScore = 0;
+      segments = Array.from({ length: total }, () => '' as const);
     }
   }
   if (homeScore !== null && state === 'soon' && (homeScore || awayScore)) state = 'live';
