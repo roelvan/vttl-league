@@ -6,19 +6,24 @@
   import type { GameSide } from '../lib/live';
   import TimeoutBadge from './match/TimeoutBadge.svelte';
   import LineupDuels from './LineupDuels.svelte';
+  import Icon from './Icon.svelte';
   import { whoOf, type Who } from './match/PlayerPopover.svelte';
   import { ownIsAway, tone } from '../lib/viewer.svelte';
+  import { shortDate } from '../lib/format';
 
   let {
     card,
     current = false,
     wide = false,
+    inDivision = false,
     oninfo,
   }: {
     card: NightCard;
     current?: boolean;
     /** The overview: also shows the games in progress. */
     wide?: boolean;
+    /** The division page: all cards are of one division, so the card shows its day. */
+    inDivision?: boolean;
     /** Opens the player widget next to `at`. */
     oninfo?: (at: HTMLElement, who: Who) => void;
   } = $props();
@@ -28,8 +33,12 @@
   /** The own club plays away: its team comes first and has the home colour. */
   const flip = $derived(ownIsAway(r.homeClub, r.awayClub));
   const teams = $derived.by(() => {
-    const home = { name: r.homeTeam, score: card.homeScore, ours: card.isHome };
-    const away = { name: r.awayTeam, score: card.awayScore, ours: !card.isHome };
+    // The trophy goes to the winner of a finished match, as in the tiles of the games.
+    const done = card.state === 'final';
+    const h = card.homeScore ?? 0;
+    const a = card.awayScore ?? 0;
+    const home = { name: r.homeTeam, score: card.homeScore, ours: !card.neutral && card.isHome, won: done && h > a };
+    const away = { name: r.awayTeam, score: card.awayScore, ours: !card.neutral && !card.isHome, won: done && a > h };
     return flip ? [away, home] : [home, away];
   });
   const outcomeText = { won: 'Gewonnen', lost: 'Verloren', draw: 'Gelijk' } as const;
@@ -69,14 +78,22 @@
 <!-- The card opens the match. It is a block with a link over it, not a link: the player
      buttons of the line-ups are inside, and a link cannot hold a button. -->
 <div class="tm" class:current>
-  <a class="tm-open" href={urls.match(r.matchId)} onclick={link} aria-current={current ? 'page' : undefined} aria-label={label}></a>
+  <!-- A match of two other clubs opens on the pages of the home club: that club has the live data. -->
+  <a class="tm-open" href={card.neutral ? urls.matchAt(r.homeClub, r.matchId) : urls.match(r.matchId)} onclick={link} aria-current={current ? 'page' : undefined} aria-label={label}></a>
   <div class="tm-top">
-    <span>{card.division || r.matchId}</span><span>·</span><span>{card.isHome ? 'Thuis' : 'Uit'}</span>
+    {#if inDivision}
+      <span>{r.date ? shortDate(r.date) : r.matchId}</span>
+    {:else if card.division && r.divisionId}
+      <a class="tm-div" href={urls.division(r.divisionId, r.week)} onclick={link} title="Alle wedstrijden van deze afdeling">{card.division}</a>
+    {:else}
+      <span>{card.division || r.matchId}</span>
+    {/if}
+    {#if !card.neutral}<span>·</span><span>{card.isHome ? 'Thuis' : 'Uit'}</span>{/if}
     <span class="spacer"></span>
     {#if card.state === 'live'}
       <span class="chip live">Live</span>
     {:else if card.state === 'final'}
-      <span class="chip" class:win={card.outcome === 'won'}>{card.outcome ? outcomeText[card.outcome] : 'Einde'} {card.isHome ? `${card.homeScore}–${card.awayScore}` : `${card.awayScore}–${card.homeScore}`}</span>
+      <span class="chip" class:win={card.outcome === 'won'}>{card.outcome ? outcomeText[card.outcome] : 'Einde'} {card.isHome || card.neutral ? `${card.homeScore}–${card.awayScore}` : `${card.awayScore}–${card.homeScore}`}</span>
     {:else if card.state === 'bye'}
       <span class="chip">Bye</span>
     {:else}
@@ -85,7 +102,7 @@
   </div>
   <div class="tm-mid">
     {#each teams as t (t.name)}
-      <span class="tn {t.ours ? 'ours' : 'them'}">{t.name}</span><span class="ts">{hasScore ? t.score : '–'}</span>
+      <span class="tn {t.ours ? 'ours' : 'them'}"><span class="tn-t">{t.name}</span>{#if t.won}<span class="trophy"><Icon name="trophy" size={16} /></span>{/if}</span><span class="ts">{hasScore ? t.score : '–'}</span>
     {/each}
   </div>
   {#each timeouts as s (s.device)}

@@ -27,6 +27,10 @@ export const urls = {
   day: (day: string) => `${prefix()}/dag/${day}`,
   match: (matchId: string) => `${prefix()}/wedstrijd/${matchSlug(matchId)}`,
   lineup: (matchId: string) => `${prefix()}/wedstrijd/${matchSlug(matchId)}/opstelling`,
+  /** All matches of a division in a week; without a week, the week in progress. */
+  division: (id: number, week?: string | null) => `${prefix()}/afdeling/${id}${week ? `/week/${encodeURIComponent(week)}` : ''}`,
+  /** A match on the pages of another club (the home club has the live data). */
+  matchAt: (club: string, matchId: string) => clubPath(club, `/wedstrijd/${matchSlug(matchId)}`),
   settings: () => '/instellingen',
 };
 

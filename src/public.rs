@@ -4,7 +4,7 @@
 //! VTTL data is read without credentials; the TabT cache is shared, so spectators mostly hit
 //! the cache that the club's own users fill.
 
-use crate::api::{ApiError, match_list, same_club};
+use crate::api::{ApiError, division_rows, match_list, same_club};
 use crate::app::App;
 use crate::boards::{BoardState, Device};
 use crate::sheets::Sheet;
@@ -86,6 +86,62 @@ pub async fn club(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>) -> Re
     let mut list = list?;
     list["club"] = json!(info.ok().flatten());
     Ok(Json(list))
+}
+
+#[derive(Deserialize)]
+pub struct DivisionQuery {
+    club: String,
+    id: i64,
+    week: Option<String>,
+}
+
+/// A division for the division page: the standings, the weeks, and the matches of one week
+/// with their details. Without `week` (or with an unknown one): the week in progress.
+pub async fn division(State(app): State<Arc<App>>, Query(q): Query<DivisionQuery>) -> Result<Json<Value>, ApiError> {
+    let club = club_id(&q.club)?;
+    let vttl = |e: anyhow::Error| ApiError::Vttl(e.to_string());
+    let season = app.tabt.current_season(None).await.map_err(vttl)?;
+    let divisions = app.tabt.divisions(None, season).await.map_err(vttl)?;
+    let division = divisions.iter().find(|d| d.id == q.id).ok_or_else(|| ApiError::NotFound(format!("Afdeling {} niet gevonden", q.id)))?;
+    let (calendar, ranking) = tokio::join!(app.tabt.division_calendar(None, season, q.id), app.tabt.division_ranking(None, q.id));
+    let weeks = weeks_of(&calendar.map_err(vttl)?);
+    let today = crate::when::local_day(crate::tabt::now_ms() / 1000);
+    let week = match q.week.as_deref().filter(|w| weeks.iter().any(|x| x.0 == *w)) {
+        Some(w) => w.to_string(),
+        None => current_week(&weeks, &today).unwrap_or_default(),
+    };
+    let matches = if week.is_empty() { Vec::new() } else { app.tabt.division_week(None, season, q.id, &week).await.map_err(vttl)? };
+    Ok(Json(json!({
+        "season": season,
+        "division": division,
+        "week": week,
+        "weeks": weeks.iter().map(|(week, from, to)| json!({ "week": week, "from": from, "to": to })).collect::<Vec<_>>(),
+        // The standings are an extra: the page still shows the matches when VTTL has none.
+        "ranking": ranking.unwrap_or_default(),
+        "rows": division_rows(&matches, division, club),
+        "matches": matches,
+    })))
+}
+
+/// The weeks of a calendar in the order of play: (name, first day, last day).
+fn weeks_of(calendar: &[TeamMatch]) -> Vec<(String, String, String)> {
+    let mut weeks: Vec<(String, String, String)> = Vec::new();
+    for m in calendar.iter().filter(|m| !m.week.is_empty() && !m.date.is_empty()) {
+        match weeks.iter_mut().find(|w| w.0 == m.week) {
+            Some(w) => {
+                if m.date < w.1 { w.1 = m.date.clone() }
+                if m.date > w.2 { w.2 = m.date.clone() }
+            }
+            None => weeks.push((m.week.clone(), m.date.clone(), m.date.clone())),
+        }
+    }
+    weeks.sort_by(|a, b| (&a.1, &a.0).cmp(&(&b.1, &b.0)));
+    weeks
+}
+
+/// The first week that is not over on `today`, else the last week of the season.
+fn current_week(weeks: &[(String, String, String)], today: &str) -> Option<String> {
+    weeks.iter().find(|w| w.2.as_str() >= today).or(weeks.last()).map(|w| w.0.clone())
 }
 
 pub async fn sheets(State(app): State<Arc<App>>, Query(q): Query<DayQuery>) -> Result<Json<Vec<Sheet>>, ApiError> {
@@ -240,6 +296,24 @@ mod tests {
     fn club_list_has_no_venues() {
         let c = crate::tabt::Club { id: "WVL154".into(), name: "Zonnebeke".into(), long_name: "TTC Zonnebeke".into(), category: 9, category_name: "West-Vlaanderen".into(), venues: vec![] };
         assert_eq!(club_line(&c), json!({ "id": "WVL154", "name": "Zonnebeke", "longName": "TTC Zonnebeke", "categoryName": "West-Vlaanderen" }));
+    }
+
+    #[test]
+    fn weeks_in_play_order() {
+        let m = |week: &str, date: &str| {
+            crate::tabt::parse_match(&format!(
+                "<Envelope><Body><R><TeamMatchesEntries><MatchId>A/1</MatchId><WeekName>{week}</WeekName><Date>{date}</Date><HomeClub>A1</HomeClub><AwayClub>B2</AwayClub></TeamMatchesEntries></R></Body></Envelope>"
+            ))
+        };
+        // Week 02 was moved to a later day than week 03; a match without a date does not count.
+        let weeks = weeks_of(&[m("01", "2026-09-19"), m("01", "2026-09-18"), m("03", "2026-10-03"), m("02", "2026-10-10"), m("04", "")]);
+        let names: Vec<&str> = weeks.iter().map(|w| w.0.as_str()).collect();
+        assert_eq!(names, ["01", "03", "02"]);
+        assert_eq!((weeks[0].1.as_str(), weeks[0].2.as_str()), ("2026-09-18", "2026-09-19"));
+        assert_eq!(current_week(&weeks, "2026-09-19").as_deref(), Some("01"));
+        assert_eq!(current_week(&weeks, "2026-09-20").as_deref(), Some("03"));
+        assert_eq!(current_week(&weeks, "2027-01-01").as_deref(), Some("02"));
+        assert_eq!(current_week(&[], "2027-01-01"), None);
     }
 
     #[test]

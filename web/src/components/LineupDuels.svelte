@@ -65,7 +65,7 @@
   {#each sides as side (side)}
     {@const cls = tone(side === 'home' ? 'h' : 'a', flip)}
     <div class="nl-col">
-      <div class="nl-h"><span class="n">{names[side]}</span><span>W–V</span></div>
+      <div class="nl-h"><span class="n">{names[side]}</span><span>W/V</span></div>
       {#each lineup[side] as r (r.key)}
         {@const duel = active && active !== r ? (active.vs[r.key] ?? null) : null}
         <!-- The row is not a button: the info button is in it. The pick button lies over the row. -->
@@ -117,7 +117,7 @@
           {:else}
             <span class="wl" class:clean={r.wins > 0 && !r.losses}>
               {#if !active && r.upsets}<span class="upset" title="Won van een hoger klassement"><Icon name="up" size={13} /></span>{/if}
-              {r.wins}<span class="sep">-</span>{r.losses}</span>
+              {r.wins}<span class="sep">/</span>{r.losses}</span>
           {/if}
         </div>
       {/each}

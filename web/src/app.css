@@ -198,6 +198,9 @@ button.chip { cursor: pointer; }
 .sync-state.offline, .sync-state.error { color: var(--danger); }
 .sync-state.idle::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
 .spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; animation: spin 0.8s linear infinite; }
+/* Data that still loads: a larger ring in the centre of its place. */
+.loading { display: grid; place-items: center; padding: 8px; }
+.loading .spinner { width: 28px; height: 28px; border-width: 3px; border-top-color: var(--fg); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* menu popover */
@@ -413,7 +416,7 @@ button.rank:hover { color: var(--fg); border-color: var(--faint); }
 .daynav { display: flex; align-items: center; gap: 6px; }
 .daynav .day { flex: 1; text-align: center; font-weight: 700; position: relative; min-width: 0; }
 .daynav .day::first-letter { text-transform: uppercase; }
-.daynav .day input { position: absolute; inset: 0; opacity: 0; cursor: pointer; min-height: 0; }
+.daynav .day input, .daynav .day select { position: absolute; inset: 0; opacity: 0; cursor: pointer; min-height: 0; }
 .daynav .btn { min-height: 44px; width: 44px; padding: 0; }
 .night-list { display: grid; gap: 10px; }
 .tm { position: relative; container-type: inline-size; display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); text-decoration: none; color: inherit; }
@@ -483,9 +486,15 @@ button.rank:hover { color: var(--fg); border-color: var(--faint); }
 :root[data-theme='light'] .away .team-tag,
 :root[data-theme='light'] .rank-tag.a { background: var(--away); color: var(--on-away); }
 .tm-top { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); font-weight: 600; min-width: 0; }
-.tm-top > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-top > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The division in a card and in the score header: a link to all matches of the division. */
+.tm-div, .board-div { position: relative; z-index: 1; color: inherit; text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
+.tm-div:hover, .board-div:hover { color: var(--fg); text-decoration-color: currentColor; }
+.board-div { display: inline-flex; align-items: center; gap: 8px; }
 .tm-mid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; }
-.tm-mid .tn { font: 600 16px/1.25 var(--font); letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-mid .tn { display: flex; align-items: center; gap: 6px; min-width: 0; font: 600 16px/1.25 var(--font); letter-spacing: -0.02em; }
+.tm-mid .tn-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-mid .trophy { flex: none; display: grid; color: var(--warn); }
 .tm-mid .ts { font: 700 20px/1 var(--font); letter-spacing: -0.02em; text-align: right; font-variant-numeric: tabular-nums; }
 .tm-mid .ours { color: var(--fg); }
 .tm-mid .them { color: var(--muted); }
@@ -498,6 +507,42 @@ button.rank:hover { color: var(--fg); border-color: var(--faint); }
   grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
   width: 100%; max-width: calc(var(--n, 1) * 440px); justify-self: center;
 }
+/* The division page: the name of the division, the week, the standings and the cards. */
+.div-title { font: 700 20px/1.2 var(--font); letter-spacing: -0.02em; text-align: center; min-width: 0; }
+/* The heading is a list: the club night and the divisions of the club. */
+.view-pick { position: relative; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 44px; cursor: pointer; }
+.view-pick .vp-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.view-pick svg { flex: none; transform: rotate(90deg); color: var(--muted); }
+.view-pick:hover svg { color: var(--fg); }
+.view-pick select { position: absolute; inset: 0; opacity: 0; cursor: pointer; min-height: 0; }
+/* No ring around the heading. With the keyboard, the focus shows as a line under the name. */
+.view-pick select:focus, .view-pick select:focus-visible { outline: none; }
+.view-pick:has(select:focus-visible) .vp-t { text-decoration: underline; text-underline-offset: 5px; }
+.view-pick:has(select:focus-visible) svg { color: var(--fg); }
+.standings { width: 100%; max-width: 720px; justify-self: center; padding: 6px 0; overflow-x: auto; }
+/* One column of the full width: an auto column takes the width of all cards in one row. */
+.div-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+@media (min-width: 1100px) {
+  /* Two columns only with the standings: the spinner and a message stay in the centre of the page. */
+  .div-body:has(.standings) { grid-template-columns: minmax(0, 1fr) 460px; align-items: start; }
+  .div-body:has(.standings) .night-list { max-width: none; }
+  .div-body .standings { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 76px); }
+}
+.standings table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.standings th, .standings td { padding: 7px 6px; text-align: left; font-weight: 500; white-space: nowrap; }
+.standings tr > :first-child { padding-left: 16px; }
+.standings tr > :last-child { padding-right: 16px; }
+.standings thead th { color: var(--muted); font-size: 13px; font-weight: 600; }
+.standings abbr { text-decoration: none; }
+.standings tbody tr { border-top: 1px solid var(--line); }
+.standings .n { text-align: right; font-variant-numeric: tabular-nums; width: 1%; }
+.standings tbody .n { color: var(--muted); }
+.standings tbody th { width: auto; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.standings tbody a { color: inherit; text-decoration: none; }
+.standings tbody a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.standings tbody .total { color: var(--fg); font-weight: 700; }
+.standings .ours th, .standings .ours td { color: var(--fg); font-weight: 700; }
+.standings .ours { background: var(--surface-2); }
 /* No matches: a plain message under the day, not one lone card in the first column. */
 .night-wide .night-list > .empty { grid-column: 1 / -1; background: none; border: 0; box-shadow: none; padding: 48px 16px; font-size: 17px; }
 .night-wide .tm { align-content: start; }
@@ -688,6 +733,7 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .night-wide .night-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; }
   .night-wide .daynav { grid-column: 2; width: 340px; }
   .night-wide .daynav .day { font-size: 20px; letter-spacing: -0.02em; }
+  .night-wide .div-title { text-align: left; }
   .night-wide .filters { grid-column: 3; justify-self: end; flex-wrap: nowrap; }
   .lineup-cols { grid-template-columns: 1fr 1fr; }
   /* Top padding 14px: the close button then sits 10px from the top and 10px from the right. */

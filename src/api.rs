@@ -98,6 +98,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/boards/link", post(boards::link))
         .route("/api/public/clubs", get(public::clubs))
         .route("/api/public/club", get(public::club))
+        .route("/api/public/division", get(public::division))
         .route("/api/public/sheets", get(public::sheets))
         .route("/api/public/sheet", get(public::sheet))
         .route("/api/public/match", get(public::team_match))
@@ -342,6 +343,9 @@ struct MatchRow<'a> {
     division_level: Option<i64>,
     /// Winner per game in VTTL order: "h", "a", or "-" when not played. None without results.
     games: Option<String>,
+    /// A match of the division without a team of the club (the division page only).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    neutral: bool,
 }
 
 #[derive(Serialize)]
@@ -460,6 +464,31 @@ pub fn match_rows(matches: &[&TeamMatch], teams: &[tabt::Team], divisions: &[tab
                 match_system: m.details.as_ref().map(|d| d.match_system).filter(|s| *s != 0),
                 division_level: levels.get(&m.division_id).copied(),
                 games: m.details.as_ref().and_then(game_winners),
+                neutral: false,
+            }
+        })
+        .collect();
+    json!(rows)
+}
+
+/// The rows of the division page: all matches of a division, seen from `club`. A match
+/// without a team of the club is `neutral`.
+pub fn division_rows(matches: &[TeamMatch], division: &tabt::Division, club: &str) -> Value {
+    let rows: Vec<MatchRow> = matches
+        .iter()
+        .map(|m| {
+            let is_home = same_club(&m.home_club, club);
+            let neutral = !is_home && !same_club(&m.away_club, club);
+            MatchRow {
+                m: head(m),
+                is_home,
+                team_letter: (!neutral).then(|| team_letter(if is_home { &m.home_team } else { &m.away_team })),
+                division_name: Some(&division.name),
+                match_type: Some(division.match_type),
+                match_system: m.details.as_ref().map(|d| d.match_system).filter(|s| *s != 0),
+                division_level: Some(division.level),
+                games: m.details.as_ref().and_then(game_winners),
+                neutral,
             }
         })
         .collect();

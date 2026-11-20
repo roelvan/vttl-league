@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Loading from '../components/Loading.svelte';
   import ScoreHeader from '../components/match/ScoreHeader.svelte';
   import TableCard from '../components/match/TableCard.svelte';
   import MatchOrder from '../components/match/MatchOrder.svelte';
@@ -119,14 +120,15 @@
 
 {#if !sheet || !view}
   <div class="card empty">
-    {#if !sheet}<p>Wedstrijd laden…</p>{:else}<p>Dit matchsysteem kent de app niet ({sheet.matchSystemId}).</p>{/if}
+    {#if !sheet}<Loading label="Wedstrijd laden" />{:else}<p>Dit matchsysteem kent de app niet ({sheet.matchSystemId}).</p>{/if}
   </div>
 {:else}
   {#if sheet.vttlLocked}
     <div class="banner"><Icon name="lock" />VTTL heeft deze uitslag gevalideerd. Niemand kan nog iets wijzigen.</div>
   {/if}
 
-  <ScoreHeader {sheet} {view} {flip} score={pending ? vttlScore : null} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series} />
+  <ScoreHeader {sheet} {view} {flip} score={pending ? vttlScore : null} week={row?.week ?? ''} division={row?.divisionName ? shortDivision(row.divisionName) : sheet.series}
+    divisionHref={row?.divisionId ? urls.division(row.divisionId, row.week) : ''} />
 
   <div class="match-grid">
     <div class="match-main">

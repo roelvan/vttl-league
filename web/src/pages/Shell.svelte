@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Loading from '../components/Loading.svelte';
   import TopBar from '../components/TopBar.svelte';
   import BottomNav from '../components/BottomNav.svelte';
   import MatchTabs from '../components/MatchTabs.svelte';
@@ -9,6 +10,7 @@
   import LineUpPage from './LineUpPage.svelte';
   import SettingsPage from './SettingsPage.svelte';
   import ClubSearch from './ClubSearch.svelte';
+  import DivisionPage from './DivisionPage.svelte';
   import Dialog from '../dialogs/Dialog.svelte';
   import PrintDialog from '../dialogs/PrintDialog.svelte';
   import UploadDialog from '../dialogs/UploadDialog.svelte';
@@ -47,15 +49,18 @@
     const club = pm ? decodeURIComponent(pm[1]) : null;
     const p = pm ? (pm[2] ?? '/') : route.path;
     let r: Record<string, string> | null;
+    const base = { division: 0, week: null as string | null };
     if (!club) {
-      if (p === '/instellingen' && session.me) return { club, section: 'other' as const, id: null, day: null, rest: p };
+      if (p === '/instellingen' && session.me) return { ...base, club, section: 'other' as const, id: null, day: null, rest: p };
       // "/clubs": the club search, also with a login. Any other path is an old link.
-      return { club, section: 'clubs' as const, id: null, day: null, rest: p === '/clubs' ? '/' : p, pick: p === '/clubs' };
+      return { ...base, club, section: 'clubs' as const, id: null, day: null, rest: p === '/clubs' ? '/' : p, pick: p === '/clubs' };
     }
-    if ((r = match('/wedstrijd/:id/opstelling', p))) return { club, section: 'lineup' as const, id: matchIdFromSlug(r.id), day: null, rest: p };
-    if ((r = match('/wedstrijd/:id', p))) return { club, section: 'match' as const, id: matchIdFromSlug(r.id), day: null, rest: p };
-    if ((r = match('/dag/:day', p)) && /^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { club, section: 'night' as const, id: null, day: r.day, rest: p };
-    return { club, section: 'night' as const, id: null, day: playDayIso(), rest: p };
+    if ((r = match('/wedstrijd/:id/opstelling', p))) return { ...base, club, section: 'lineup' as const, id: matchIdFromSlug(r.id), day: null, rest: p };
+    if ((r = match('/wedstrijd/:id', p))) return { ...base, club, section: 'match' as const, id: matchIdFromSlug(r.id), day: null, rest: p };
+    if ((r = match('/dag/:day', p)) && /^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { ...base, club, section: 'night' as const, id: null, day: r.day, rest: p };
+    if ((r = match('/afdeling/:id', p) ?? match('/afdeling/:id/week/:week', p)) && /^\d+$/.test(r.id))
+      return { ...base, club, section: 'division' as const, id: null, day: null, rest: p, division: Number(r.id), week: r.week ?? null };
+    return { ...base, club, section: 'night' as const, id: null, day: playDayIso(), rest: p };
   });
 
   $effect.pre(() => {
@@ -129,6 +134,8 @@
         ? 'Kies een club'
       : m.section === 'night'
         ? 'Clubavond'
+      : m.section === 'division'
+        ? 'Afdeling'
         : `${m.section === 'lineup' ? 'Opstelling' : 'Wedstrijd'}${sheet ? `: ${sheet.home.name} – ${sheet.away.name}` : ''}`,
   );
   $effect(() => {
@@ -195,7 +202,9 @@
     {#if m.section === 'clubs'}
       {#if m.pick || !ownClub}<ClubSearch rest={m.rest} />{/if}
     {:else if m.section === 'night'}
-      <div class="view night-wide"><ClubNight {day} {rows} loaded={!!list} wide /></div>
+      <div class="view night-wide"><ClubNight {day} {rows} loaded={!!list} wide teams={list?.teams ?? []} /></div>
+    {:else if m.section === 'division'}
+      <div class="view night-wide"><DivisionPage id={m.division} week={m.week} teams={list?.teams ?? []} /></div>
     {:else if m.section === 'match' && m.id}
       {#if homeMatch}<MatchTabs section="match" matchId={m.id} />{/if}
       {#key m.id}<MatchPage matchId={m.id} {row} {onaction} canPrint={homeMatch} />{/key}
@@ -204,7 +213,7 @@
         <MatchTabs section="lineup" matchId={m.id} />
         {#key m.id}<LineUpPage matchId={m.id} {row} />{/key}
       {:else}
-        <div class="card empty"><p>Wedstrijd laden…</p></div>
+        <div class="card empty"><Loading label="Wedstrijd laden" /></div>
       {/if}
     {:else}
       <SettingsPage />

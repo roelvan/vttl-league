@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Loading from '../Loading.svelte';
   // Pick the players of one team from the strength list. Picked players get their slot in
   // ranking order (strength-list index), as on the VTTL sheet. Players with the same index may
   // stand in any order: they keep the order of the clicks.
@@ -138,7 +139,7 @@
           {/if}
         </div>
       {:else}
-        <p class="muted">{list ? 'Niemand gevonden.' : 'Sterktelijst laden…'}</p>
+        {#if list}<p class="muted">Niemand gevonden.</p>{:else}<Loading label="Sterktelijst laden" />{/if}
       {/each}
     </div>
     {#if !query}

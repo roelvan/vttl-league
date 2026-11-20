@@ -115,14 +115,14 @@
       <dl class="pp-stats">
         <div><dt>ELO</dt><dd>{info.elo ?? '–'}</dd></div>
         <div><dt>Winst</dt><dd>{ratio === null ? '–' : `${ratio}%`}</dd></div>
-        <div><dt>W–V</dt><dd>{info.wins}<span class="sep">-</span>{info.losses}</dd></div>
+        <div><dt>W/V</dt><dd>{info.wins}<span class="sep">/</span>{info.losses}</dd></div>
       </dl>
 
       {#if games}
         <h3>Tegen klassement</h3>
         <ul class="pp-ranks">
           {#each info.byRank as r (r.ranking)}
-            <li><span class="rk">{r.ranking || '–'}</span><span class="wl">{r.wins}<span class="sep">-</span>{r.losses}</span></li>
+            <li><span class="rk">{r.ranking || '–'}</span><span class="wl">{r.wins}<span class="sep">/</span>{r.losses}</span></li>
           {/each}
         </ul>
 

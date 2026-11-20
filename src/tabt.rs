@@ -76,7 +76,7 @@ pub trait Store: Send + Sync {
 /// the background (stale-while-revalidate). Only a cold cache makes a user wait for VTTL.
 pub const STALE_FOR: Duration = Duration::from_secs(30 * 86400);
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64
 }
 
@@ -318,6 +318,26 @@ pub struct TeamMatch {
     pub is_locked: bool,
     pub is_bye: bool,
     pub details: Option<MatchDetails>,
+}
+
+/// One team in the standings of a division.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RankingEntry {
+    pub position: i64,
+    pub team: String,
+    pub team_club: String,
+    /// Team matches.
+    pub played: i64,
+    pub won: i64,
+    pub lost: i64,
+    pub draw: i64,
+    /// Individual games.
+    pub games_won: i64,
+    pub games_lost: i64,
+    pub sets_won: i64,
+    pub sets_lost: i64,
+    pub points: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -641,18 +661,46 @@ impl Tabt {
         self.peek("GetMatchesRequest", &day_fields(club, season, day)).map(|(at, _)| at)
     }
 
-    /// All matches of a division in a season (for the division-day wizard).
-    #[allow(dead_code)]
-    pub async fn division_matches(&self, c: &Creds, season: i64, division: i64) -> Result<Vec<TeamMatch>> {
+    /// The calendar of a division: all its matches, without details.
+    pub async fn division_calendar(&self, c: Option<&Creds>, season: i64, division: i64) -> Result<Vec<TeamMatch>> {
+        let r = self
+            .call(c, "GetMatchesRequest", &[("DivisionId", division.to_string()), ("Season", season.to_string())], TTL_SEASON)
+            .await?;
+        Ok(r.children("TeamMatchesEntries").map(team_match).collect())
+    }
+
+    /// The matches of a division in one week, with details.
+    pub async fn division_week(&self, c: Option<&Creds>, season: i64, division: i64, week: &str) -> Result<Vec<TeamMatch>> {
         let r = self
             .call(
-                Some(c),
+                c,
                 "GetMatchesRequest",
-                &[("DivisionId", division.to_string()), ("Season", season.to_string()), ("WithDetails", "true".into())],
+                &[("DivisionId", division.to_string()), ("Season", season.to_string()), ("WeekName", week.into()), ("WithDetails", "true".into())],
                 TTL_SHORT,
             )
             .await?;
         Ok(r.children("TeamMatchesEntries").map(team_match).collect())
+    }
+
+    /// The standings of a division. A division id is of one season, so there is no season here.
+    pub async fn division_ranking(&self, c: Option<&Creds>, division: i64) -> Result<Vec<RankingEntry>> {
+        let r = self.call(c, "GetDivisionRankingRequest", &[("DivisionId", division.to_string())], TTL_SHORT).await?;
+        Ok(r.children("RankingEntries")
+            .map(|e| RankingEntry {
+                position: e.i("Position"),
+                team: e.s("Team").trim().to_string(),
+                team_club: e.s("TeamClub"),
+                played: e.i("GamesPlayed"),
+                won: e.i("GamesWon"),
+                lost: e.i("GamesLost"),
+                draw: e.i("GamesDraw"),
+                games_won: e.i("IndividualMatchesWon"),
+                games_lost: e.i("IndividualMatchesLost"),
+                sets_won: e.i("IndividualSetsWon"),
+                sets_lost: e.i("IndividualSetsLost"),
+                points: e.i("Points"),
+            })
+            .collect())
     }
 
     /// One match. `fresh` skips the cache (the read-back after an upload).

@@ -2,12 +2,14 @@
   import type { Sheet } from '../../lib/sheet/types';
   import type { LiveView, Side } from '../../lib/live';
   import { tone } from '../../lib/viewer.svelte';
+  import { link } from '../../lib/router.svelte';
 
   let {
     sheet,
     view,
     week = '',
     division = '',
+    divisionHref = '',
     score = null,
     flip = false,
   }: {
@@ -15,6 +17,8 @@
     view: LiveView;
     week?: string;
     division?: string;
+    /** The page with all matches of the division. */
+    divisionHref?: string;
     /** The team score of VTTL, shown while the results of the match still load. */
     score?: [number, number] | null;
     /** The own club plays away: the away team comes first, in the home colour. */
@@ -43,7 +47,12 @@
 <section class="card board" aria-label="Stand van de ploegenwedstrijd">
   <div class="board-meta">
     <!-- shortDivision joins its parts with " · ": show them with the same dots as the rest. -->
-    {#each division.split(' · ').filter(Boolean) as part, i (i)}<span>{part}</span><span class="dot"></span>{/each}
+    {#snippet parts()}{#each division.split(' · ').filter(Boolean) as part, i (i)}{#if i}<span class="dot"></span>{/if}<span>{part}</span>{/each}{/snippet}
+    {#if division && divisionHref}
+      <a class="board-div" href={divisionHref} onclick={link} title="Alle wedstrijden van deze afdeling">{@render parts()}</a><span class="dot"></span>
+    {:else if division}
+      {@render parts()}<span class="dot"></span>
+    {/if}
     {#if week}<span class="hide-sm">Week {week}</span><span class="dot hide-sm"></span>{/if}
     <span class="num">{sheet.matchId}</span>
     <span class="spacer"></span>

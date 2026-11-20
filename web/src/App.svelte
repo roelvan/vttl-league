@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Loading from './components/Loading.svelte';
   import { session, loadMe } from './lib/session.svelte';
   import { route, navigate } from './lib/router.svelte';
   import { applyTheme } from './lib/settings.svelte';
@@ -37,13 +38,13 @@
 {/if}
 
 {#if route.path === '/login'}
-  {#if session.me}<main class="center"><p class="muted">Laden…</p></main>{:else}<Login />{/if}
+  {#if session.me}<main class="center"><Loading /></main>{:else}<Login />{/if}
 {:else if isClubPath}
   <Shell />
 {:else if session.loading && !session.me}
-  <main class="center"><p class="muted">Laden…</p></main>
+  <main class="center"><Loading /></main>
 {:else if isPrivatePath && !session.me}
-  <main class="center"><p class="muted">Laden…</p></main>
+  <main class="center"><Loading /></main>
 {:else if needsMember || route.path === '/ik'}
   <WhoAmI />
 {:else}

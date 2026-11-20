@@ -1,14 +1,16 @@
 <script lang="ts">
+  import Loading from './Loading.svelte';
   import NightCardView from './NightCardView.svelte';
   import PlayerPopover from './match/PlayerPopover.svelte';
   import { warmPlayers } from '../lib/players.svelte';
   import Icon from './Icon.svelte';
+  import ViewPicker from './ViewPicker.svelte';
   import { ws, loadDay } from '../lib/workspace.svelte';
   import { nightCard, matchesOn, matchDays } from '../lib/night';
   import { navigate } from '../lib/router.svelte';
   import { urls } from '../lib/nav';
   import { longDate, shortDate } from '../lib/format';
-  import type { MatchRow } from '../lib/types';
+  import type { MatchRow, Team } from '../lib/types';
 
   let {
     day,
@@ -17,6 +19,7 @@
     currentId = null,
     filters = true,
     wide = false,
+    teams = [],
   }: {
     day: string;
     rows: MatchRow[];
@@ -25,6 +28,8 @@
     filters?: boolean;
     /** The overview of the day: the cards also show the games in progress. */
     wide?: boolean;
+    /** The teams of the club: the overview gets the switch to their divisions. */
+    teams?: Team[];
   } = $props();
 
   type Filter = 'all' | 'live' | 'final';
@@ -66,6 +71,7 @@
 </script>
 
 <div class="night-head">
+  {#if wide && teams.length}<ViewPicker title="Clubavond" {teams} week={week || null} clubHref={urls.day(day)} />{/if}
   <div class="daynav">
     <button class="btn ghost" type="button" onclick={() => go(prev)} disabled={!prev} aria-label="Vorige speeldag"><Icon name="left" /></button>
     <label class="day">
@@ -92,7 +98,7 @@
   {:else}
     <div class="card empty">
       {#if !loaded}
-        <p>Wedstrijden laden…</p>
+        <Loading label="Wedstrijden laden" />
       {:else if cards.length}
         <p>Geen wedstrijden voor deze filter.</p>
       {:else}

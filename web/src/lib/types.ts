@@ -95,6 +95,49 @@ export interface MatchRow {
   divisionLevel: number | null;
   /** Winner per game in VTTL order ("h", "a", "-" = not played); absent without results. */
   games?: string | null;
+  /** The division page: a match without a team of the club on screen. */
+  neutral?: boolean;
+}
+
+/** src/tabt.rs `Division`. */
+export interface Division {
+  id: number;
+  name: string;
+  category: number;
+  level: number;
+  matchType: number;
+}
+
+/** One team in the standings of a division (src/tabt.rs `RankingEntry`). */
+export interface RankingEntry {
+  position: number;
+  team: string;
+  teamClub: string;
+  /** Team matches. */
+  played: number;
+  won: number;
+  lost: number;
+  draw: number;
+  /** Individual games. */
+  gamesWon: number;
+  gamesLost: number;
+  setsWon: number;
+  setsLost: number;
+  points: number;
+}
+
+/** A division with the matches of one week (src/public.rs `division`). */
+export interface DivisionView {
+  season: number;
+  division: Division;
+  /** The week of `rows`; "" for a division without matches. */
+  week: string;
+  /** In the order of play; `from` and `to` are the first and the last day. */
+  weeks: { week: string; from: string; to: string }[];
+  ranking: RankingEntry[];
+  rows: MatchRow[];
+  /** The same matches as `rows`, with the details of VTTL. */
+  matches: TeamMatch[];
 }
 
 /** One singles game of a player (src/tabt.rs `PlayerResult`). */

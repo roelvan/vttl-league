@@ -23,6 +23,8 @@ export interface NightCard {
   row: MatchRow;
   division: string;
   isHome: boolean;
+  /** A match without a team of the club on screen (the division page). */
+  neutral: boolean;
   homeScore: number | null;
   awayScore: number | null;
   /** One entry per game: who won it, or live. Empty when the match system is unknown. */
@@ -64,8 +66,9 @@ function lineupOf(sheet: Sheet | undefined): NightCard['lineup'] {
  */
 export function nightCard(row: MatchRow, sheet: Sheet | undefined, known: Sheet | undefined = sheet): NightCard {
   const division = shortDivision(row.divisionName ?? '');
+  const neutral = !!row.neutral;
   if (row.isBye) {
-    return { row, division, isHome: row.isHome, homeScore: null, awayScore: null, segments: [], played: 0, total: 0, state: 'bye', tables: '', outcome: null, live: [], boxes: 0, lineup: null };
+    return { row, division, isHome: row.isHome, neutral, homeScore: null, awayScore: null, segments: [], played: 0, total: 0, state: 'bye', tables: '', outcome: null, live: [], boxes: 0, lineup: null };
   }
   let homeScore: number | null = null;
   let awayScore: number | null = null;
@@ -73,7 +76,7 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined, known: Sheet 
   let played = 0;
   let total = 0;
   let state: NightState = 'soon';
-  let tables = row.isHome ? '' : 'Uit';
+  let tables = row.isHome || neutral ? '' : 'Uit';
   let live: TableView[] = [];
   let boxes = 0;
 
@@ -115,8 +118,8 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined, known: Sheet 
 
   const ours = row.isHome ? homeScore : awayScore;
   const theirs = row.isHome ? awayScore : homeScore;
-  const outcome = state === 'final' && ours !== null && theirs !== null ? (ours > theirs ? 'won' : ours < theirs ? 'lost' : 'draw') : null;
-  return { row, division, isHome: row.isHome, homeScore, awayScore, segments, played, total, state, tables, outcome, live, boxes, lineup: lineupOf(known) };
+  const outcome = !neutral && state === 'final' && ours !== null && theirs !== null ? (ours > theirs ? 'won' : ours < theirs ? 'lost' : 'draw') : null;
+  return { row, division, isHome: row.isHome, neutral, homeScore, awayScore, segments, played, total, state, tables, outcome, live, boxes, lineup: lineupOf(known) };
 }
 
 /** The matches of a day, best team first. */

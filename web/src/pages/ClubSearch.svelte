@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Loading from '../components/Loading.svelte';
   import { api, type ClubLine } from '../lib/api';
   import { link } from '../lib/router.svelte';
   import { clubPath } from '../lib/nav';
@@ -70,7 +71,7 @@
         <ul class="list">{#each found.slice(0, MAX) as c (c.id)}{@render line(c)}{/each}</ul>
         {#if found.length > MAX}<p class="muted">Nog {found.length - MAX} clubs. Typ meer om de lijst korter te maken.</p>{/if}
         {#if !found.length && !loading && !error}<p class="muted">Geen club gevonden.</p>{/if}
-        {#if !found.length && loading}<p class="muted">Clubs laden…</p>{/if}
+        {#if !found.length && loading}<Loading label="Clubs laden" />{/if}
       {:else if lastClub}
         <p class="muted">Laatst bekeken:</p>
         <ul class="list">{@render line(lastClub)}</ul>

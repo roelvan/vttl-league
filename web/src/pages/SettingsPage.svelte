@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Loading from '../components/Loading.svelte';
   // The scoreboards of the club: device id (required, as on the board) and an alias.
   import Icon from '../components/Icon.svelte';
   import { boards, loadDevices, saveDevice, removeDevice } from '../lib/boards.svelte';
@@ -80,7 +81,7 @@
             {/if}
           </li>
         {:else}
-          <li class="muted">{boards.loaded ? 'Nog geen scoreborden.' : 'Laden…'}</li>
+          <li class="muted">{#if boards.loaded}Nog geen scoreborden.{:else}<Loading />{/if}</li>
         {/each}
       </ul>
     </div>

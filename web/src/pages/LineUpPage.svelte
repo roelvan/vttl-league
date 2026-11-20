@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Loading from '../components/Loading.svelte';
   import RosterPick from '../components/lineup/RosterPick.svelte';
   import Icon from '../components/Icon.svelte';
   import { ws, change } from '../lib/workspace.svelte';
@@ -77,7 +78,7 @@
 </script>
 
 {#if !sheet || !sys || !view}
-  <div class="card empty"><p>Wedstrijd laden…</p></div>
+  <div class="card empty"><Loading label="Wedstrijd laden" /></div>
 {:else}
   <section class="card board">
     <div class="board-meta">

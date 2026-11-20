@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Loading from '../components/Loading.svelte';
   // The full VTTL log of one match, newest first. One short row per attempt; a problem row
   // shows its error below it. Tap a row for the account, the cause and the upload line.
   import Dialog from './Dialog.svelte';
@@ -27,7 +28,7 @@
   {#if error}
     <p class="error">{error}</p>
   {:else if !entries}
-    <p class="muted">Laden…</p>
+    <Loading />
   {:else if !entries.length}
     <p class="muted">Leeg</p>
   {:else}
