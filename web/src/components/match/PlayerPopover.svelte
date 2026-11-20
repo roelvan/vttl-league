@@ -1,4 +1,7 @@
 <script module lang="ts">
+  import type { Person, Side } from '../../lib/live';
+  import { tone } from '../../lib/viewer.svelte';
+
   export interface Who {
     id: number;
     name: string;
@@ -7,6 +10,11 @@
     team: string;
     /** Colour class of the side: "h" or "a". */
     cls: string;
+  }
+
+  /** The player of a line-up row or a game tile, for `show`. `flip`: the own club plays away. */
+  export function whoOf(p: Person, side: Side, team: string, flip: boolean): Who {
+    return { id: p.id ?? 0, name: p.full, ranking: p.ranking, team, cls: tone(side === 'home' ? 'h' : 'a', flip) };
   }
 </script>
 

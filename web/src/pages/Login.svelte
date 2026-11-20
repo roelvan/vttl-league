@@ -1,6 +1,8 @@
 <script lang="ts">
   import { api, ApiError, OfflineError } from '../lib/api';
   import { setMe } from '../lib/session.svelte';
+  import { route, link } from '../lib/router.svelte';
+  import { safeReturn } from '../lib/nav';
   import VttlLogo from '../components/VttlLogo.svelte';
   import Credit from '../components/Credit.svelte';
 
@@ -33,6 +35,7 @@
     <label class="field">Wachtwoord <input type="password" bind:value={password} autocomplete="current-password" required /></label>
     {#if error}<p class="error">{error}</p>{/if}
     <button class="btn big" type="submit" disabled={busy}>{busy ? 'Bezig…' : 'Aanmelden'}</button>
+    <p class="muted">Aanmelden is alleen nodig om uitslagen in te geven. <a href={safeReturn(route.query.get('terug'))} onclick={link}>Verder zonder aanmelden</a></p>
   </form>
   <Credit />
 </main>

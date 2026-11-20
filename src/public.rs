@@ -68,6 +68,17 @@ pub fn public_message(text: &str) -> Option<String> {
     Some(v.to_string())
 }
 
+/// All clubs of the season, for the club search page: the id and the names only.
+pub async fn clubs(State(app): State<Arc<App>>) -> Result<Json<Vec<Value>>, ApiError> {
+    let season = app.tabt.current_season(None).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
+    let clubs = app.tabt.clubs(None, season).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
+    Ok(Json(clubs.iter().map(club_line).collect()))
+}
+
+fn club_line(c: &crate::tabt::Club) -> Value {
+    json!({ "id": c.id, "name": c.name, "longName": c.long_name, "categoryName": c.category_name })
+}
+
 pub async fn club(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>) -> Result<Json<Value>, ApiError> {
     let club = club_id(&q.club)?;
     let season = app.tabt.current_season(None).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
@@ -171,6 +182,12 @@ mod tests {
         let s = scrub(s);
         assert!(s.doc["upload"].get("by").is_none());
         assert_eq!(s.doc["upload"]["ok"], true);
+    }
+
+    #[test]
+    fn club_list_has_no_venues() {
+        let c = crate::tabt::Club { id: "WVL154".into(), name: "Zonnebeke".into(), long_name: "TTC Zonnebeke".into(), category: 9, category_name: "West-Vlaanderen".into(), venues: vec![] };
+        assert_eq!(club_line(&c), json!({ "id": "WVL154", "name": "Zonnebeke", "longName": "TTC Zonnebeke", "categoryName": "West-Vlaanderen" }));
     }
 
     #[test]

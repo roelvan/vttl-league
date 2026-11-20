@@ -558,8 +558,8 @@ impl Tabt {
         Ok(r.children("ClubEntries").next().map(club_entry))
     }
 
-    pub async fn clubs(&self, c: &Creds, season: i64) -> Result<Vec<Club>> {
-        let r = self.call(Some(c), "GetClubs", &[("Season", season.to_string())], TTL_DAY).await?;
+    pub async fn clubs(&self, c: Option<&Creds>, season: i64) -> Result<Vec<Club>> {
+        let r = self.call(c, "GetClubs", &[("Season", season.to_string())], TTL_DAY).await?;
         Ok(r.children("ClubEntries").map(club_entry).collect())
     }
 

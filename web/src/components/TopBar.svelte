@@ -1,11 +1,11 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { link, navigate } from '../lib/router.svelte';
-  import { urls, type MenuAction } from '../lib/nav';
+  import { link, navigate, route } from '../lib/router.svelte';
+  import { urls, clubPath, loginUrl, type MenuAction } from '../lib/nav';
   import { settings, toggleTheme } from '../lib/settings.svelte';
   import { session, logout } from '../lib/session.svelte';
   import { ws, pendingCount } from '../lib/workspace.svelte';
-  import { publicClub } from '../lib/viewer.svelte';
+  import { publicClub, viewClub } from '../lib/viewer.svelte';
   import VttlLogo from './VttlLogo.svelte';
   import { vttlStatus, STATUS_TEXT } from '../lib/sheet/vttl';
   import { getSystem } from '../lib/sheet/systems';
@@ -13,7 +13,7 @@
   let {
     matchId,
     day,
-    datechip = '',
+    clubName = '',
     onaction,
     printActions = false,
     matchActions = false,
@@ -21,7 +21,8 @@
     matchId: string | null;
     /** The club night the brand link opens. */
     day: string;
-    datechip?: string;
+    /** The club on screen: the chip opens the club search. */
+    clubName?: string;
     onaction: (a: MenuAction) => void;
     /** Show print (a home match of our club is open, also when validated). */
     printActions?: boolean;
@@ -50,6 +51,9 @@
     }[sync],
   );
 
+  const loginHref = $derived(loginUrl(route.path + (route.query.size ? `?${route.query}` : '')));
+  const ownClub = $derived(session.me?.account.club ?? null);
+
   function pick(a: MenuAction) {
     open = false;
     onaction(a);
@@ -66,10 +70,11 @@
   <div class="topbar-in">
     <a class="brand" href={urls.day(day)} onclick={link}><VttlLogo alt="VTTL: naar de clubavond" width={64} height={28} /></a>
     <span class="spacer"></span>
-    {#if datechip}<span class="datechip">{datechip}</span>{/if}
+    {#if clubName}<a class="chip-btn club-chip" href="/clubs" onclick={link} title="Andere club kiezen"><Icon name="club" size={16} />{clubName}</a>{/if}
     {#if session.me && !publicClub()}<span class="sync-state {sync}" title={syncText} role="img" aria-label={syncText}>
         {#if sync === 'busy'}<span class="spinner"></span>{:else if sync === 'ok'}<Icon name="check" size={16} />{:else if sync !== 'idle'}<Icon name="warn" size={16} />{/if}
       </span>{/if}
+    {#if !session.me && !session.loading}<a class="chip-btn" href={loginHref} onclick={link}><Icon name="user" size={16} />Aanmelden</a>{/if}
     <button class="btn ghost icon-btn" type="button" onclick={toggleTheme} aria-label="Wissel licht of donker">
       <Icon name={settings.theme === 'dark' ? 'sun' : 'moon'} />
     </button>
@@ -89,9 +94,15 @@
             {/if}
             <hr />
           {/if}
-          {#if matchId}<button type="button" onclick={() => pick('share')}><Icon name="share" />Publieke link kopiëren</button>{/if}
-          {#if session.me && !publicClub()}
+          {#if viewClub()}<button type="button" onclick={() => pick('share')}><Icon name="share" />Link kopiëren</button>{/if}
+          <button type="button" onclick={() => ((open = false), navigate('/clubs'))}><Icon name="search" />Andere club</button>
+          {#if ownClub && publicClub()}
+            <button type="button" onclick={() => ((open = false), navigate(clubPath(ownClub)))}><Icon name="club" />Mijn club</button>
+          {/if}
+          {#if ownClub}
             <button type="button" onclick={() => ((open = false), navigate(urls.settings()))}><Icon name="settings" />Scoreborden</button>
+          {/if}
+          {#if session.me}
             <button type="button" onclick={() => ((open = false), navigate('/ik'))}><Icon name="user" />Wie ben ik?</button>
           {/if}
           {#if session.me}
@@ -99,7 +110,7 @@
             <button type="button" onclick={() => ((open = false), logout())}><Icon name="logout" />Afmelden</button>
           {:else}
             <hr />
-            <button type="button" onclick={() => ((open = false), navigate('/login'))}><Icon name="user" />Aanmelden</button>
+            <button type="button" onclick={() => ((open = false), navigate(loginHref))}><Icon name="user" />Aanmelden</button>
           {/if}
         </div>
       {/if}

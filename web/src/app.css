@@ -116,6 +116,7 @@ label.check { display: flex; align-items: center; gap: 10px; font-weight: 500; c
   border: 1px solid transparent; border-radius: 10px; padding: 10px 14px; min-height: 44px;
   font-weight: 700; font-size: 15px; cursor: pointer; background: var(--btn-bg); color: var(--btn-fg); text-decoration: none;
 }
+a.row-btn { text-decoration: none; }
 .btn:disabled { opacity: 0.45; cursor: default; }
 .btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
 .btn.big { padding: 14px 18px; font-size: 16px; width: 100%; }
@@ -175,7 +176,12 @@ button.chip { cursor: pointer; }
   display: flex; align-items: center; gap: 10px;
   padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px));
 }
-.datechip { font: 600 14px/1 var(--font); color: var(--muted); padding: 7px 10px; border: 1px solid var(--line); border-radius: 99px; white-space: nowrap; }
+.chip-btn {
+  display: inline-flex; align-items: center; gap: 6px; font: 600 14px/1 var(--font); color: var(--muted); text-decoration: none;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 99px; white-space: nowrap; cursor: pointer;
+}
+.chip-btn svg { flex: none; }
+.chip-btn:hover { color: var(--fg); border-color: var(--faint); }
 .brand { display: flex; align-items: center; gap: 10px; font: 700 17px/1 var(--font); letter-spacing: -0.02em; color: var(--fg); text-decoration: none; padding: 4px; white-space: nowrap; }
 .brand img { display: block; height: 28px; width: auto; }
 /* Two versions of the VTTL logo: only the one for the active theme is shown. */
@@ -339,55 +345,25 @@ button.gbox:hover { background: color-mix(in srgb, var(--fg) 8%, var(--surface-2
 .mt-row .tot.lead { background: var(--fg); color: var(--bg); }
 .mt-head .status { white-space: nowrap; }
 
-/* ------------------------------------------------------------------ players tally */
-.tally { width: 100%; border-collapse: collapse; }
-.tally th { font: 600 12px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 6px 0; }
-.tally th:last-child { text-align: right; }
-.tally td { padding: 8px 0; border-top: 1px solid var(--line); vertical-align: middle; }
-.tally .who { display: flex; gap: 8px; align-items: center; min-width: 0; }
-.tally td:nth-child(2) { padding-left: 8px; }
+/* ------------------------------------------------------------------ rank tag, result dots */
 .rank-tag {
   flex: none; min-width: 30px; height: 26px; padding: 0 4px; display: grid; place-items: center; border-radius: 7px;
   font: 700 13px/1 var(--font); letter-spacing: -0.02em;
 }
 .rank-tag.h { background: var(--home-soft); color: var(--home-ink); }
 .rank-tag.a { background: var(--away-soft); color: var(--away-ink); }
-.tally .who .n { font-weight: 600; line-height: 1.2; }
-.tally .pick { width: 100%; padding: 4px 6px; margin: -4px -6px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; min-height: 36px; }
-.tally .pick:hover { background: var(--surface-2); }
-.tally .pick[aria-pressed='true'] { background: var(--fg); color: var(--bg); }
-/* The selected row is the inverse surface: there the tag is the solid team colour, not the soft tint. */
-.tally .pick[aria-pressed='true'] .rank-tag.h { background: var(--home); color: var(--on-home); }
-.tally .pick[aria-pressed='true'] .rank-tag.a { background: var(--away); color: var(--on-away); }
-.tally td:first-child { width: 100%; }
-.tally .wl { font: 700 18px/1 var(--font); letter-spacing: -0.02em; text-align: right; padding-left: 12px; width: 1%; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pips { display: flex; gap: 3px; justify-content: flex-end; }
 .pip { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--faint); }
 .pip.w { background: var(--win); border-color: var(--win); }
 .pip.l { background: var(--faint); border-color: var(--faint); opacity: 0.6; }
 .pip.live { border-color: var(--live); }
-.tally .wl .sep { color: var(--muted); font-weight: 600; padding: 0 1px; }
-/* The row: the name (select its games) and the info button (the player widget). */
-.tally .who-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.tally .who-row > .who { flex: 1; min-width: 0; }
-/* No negative margin on the right: there the selected row would go under the info button. */
-.tally .who-row > .pick { width: auto; margin-right: 0; }
-.who-info {
-  position: relative; flex: none; width: 36px; height: 36px; display: grid; place-items: center;
-  border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer;
-}
-/* A 44px touch target around the 36px button. */
-.who-info::before { content: ''; position: absolute; inset: -4px; }
-.who-info:hover { background: var(--surface-2); color: var(--fg); }
-/* In a game tile: as high as the row. The rows are 32px apart, so the touch target is 32px high. */
-.who-info.sm { width: 26px; height: 26px; border-radius: 6px; }
-.who-info.sm::before { inset: -3px -8px; }
-/* On a phone the rank tag of a game tile is the info button. */
+/* The ranking of a player is the button that opens the player widget. */
 button.rank-tag { position: relative; border: 0; cursor: pointer; }
 button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
-.mt .who-info:hover { background: var(--line); }
-/* The glyph is 16px in a 26px button: pull the button in, so the glyph is 6px from the name and from the next icon. */
-.mt-name .who-info.sm { margin: 0 -3px; }
+button.rank-tag:hover { box-shadow: 0 0 0 1.5px currentColor; }
+button.rank { position: relative; z-index: 1; background: transparent; cursor: pointer; }
+button.rank::before { content: ''; position: absolute; inset: -6px; }
+button.rank:hover { color: var(--fg); border-color: var(--faint); }
 
 /* ------------------------------------------------------------------ player widget */
 .pp {
@@ -418,7 +394,6 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
 .pp-note, .pp-foot { margin: 0; color: var(--muted); }
 .pp-foot { font-size: 12px; }
 .pp-load { display: grid; gap: 8px; }
-.tally-split { display: grid; gap: 16px; }
 
 .info { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 15px; margin: 0; }
 .info dt { color: var(--muted); font-weight: 500; }
@@ -447,13 +422,16 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
 /* The link of the card: over the full card, under the player buttons of the line-ups. */
 .tm-open { position: absolute; inset: 0; border-radius: inherit; }
 /* Line-ups in the card: one column per team, one button per player. */
-.nl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+/* The content of a row (ranking, name, number) is in line with the other content of the card.
+   The background of a row in focus goes over that line: --nl-l on the left, --nl-pad on the right. */
+.nl { --nl-l: 5px; --nl-pad: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; padding-top: 10px; border-top: 1px solid var(--line); }
 .nl-col { display: grid; gap: 2px; align-content: start; min-width: 0; }
-.nl-h { display: flex; justify-content: space-between; gap: 8px; padding: 0 5px 4px; white-space: nowrap; font: 600 12px/1.2 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.nl-h { display: flex; justify-content: space-between; gap: 8px; padding: 0 0 4px; white-space: nowrap; font: 600 12px/1.2 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .nl-h .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nl-row {
-  position: relative; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; min-height: 38px; padding: 4px 5px;
-  border: 0; border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  position: relative; display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 38px;
+  padding: 4px var(--nl-pad) 4px var(--nl-l); margin: 0 calc(-1 * var(--nl-pad)) 0 calc(-1 * var(--nl-l));
+  border-radius: 9px;
   transition: background-color 0.12s, opacity 0.12s;
 }
 .nl-row .n { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -464,14 +442,31 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
 /* One fixed width for the W–V number and for the result on hover: the name does not move. */
 .nl-row .wl, .nl-row .res { display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-width: 40px; }
 .nl-row .wl { gap: 0; }
-.nl-row .upset { display: grid; color: var(--win); margin-right: 3px; }
+/* The glyph has 3px of empty room on each side: pull the number in, so the arrow is 2px from it. */
+.nl-row .upset { display: grid; color: var(--win); margin-right: -1px; }
+.nl-row .res .upset { margin-right: -3px; }
 .nl-row .res { font-size: 14px; }
 /* A narrow card (a phone): one team below the other, so the names have room. The width is that of the card content. */
 @container (max-width: 339px) {
   .nl { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 }
-.nl-row.on, .nl-row[aria-pressed='true'] { background: var(--surface-2); }
-.nl-row[aria-pressed='true'] { box-shadow: inset 0 0 0 1.5px var(--faint); }
+.nl-row.on, .nl-row.pinned { background: var(--surface-2); }
+.nl-row.pinned { box-shadow: inset 0 0 0 1.5px var(--faint); }
+/* The pick button lies over the row; the ranking (the player widget) is above it. */
+.nl-pick { position: absolute; inset: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
+.nl-row button.rank-tag { z-index: 1; }
+/* The Spelers card of the match page: full names, a dot per game, more room. */
+.nl-box { container-type: inline-size; }
+.nl.full { gap: 0 24px; padding-top: 0; border-top: 0; }
+.nl.full { --nl-l: 8px; --nl-pad: 10px; }
+.nl.full .nl-col { gap: 4px; }
+.nl.full .nl-row { min-height: 44px; gap: 8px; border-radius: 10px; }
+.nl.full .nl-h { padding-bottom: 6px; }
+.nl.full .nl-row .n { font-size: 16px; }
+.nl.full .nl-row .wl { font-size: 18px; }
+@container (max-width: 519px) {
+  .nl.full { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}
 .nl-row.off { opacity: 0.4; }
 /* The player in focus won (green) or lost (red) against this row. The set score says the same. */
 .nl-row.is-w { background: color-mix(in srgb, var(--win) 16%, transparent); }
@@ -562,6 +557,7 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
   border-top: 1px solid var(--line);
   padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
 }
+.bottomnav.two { grid-template-columns: repeat(2, 1fr); }
 .bottomnav a { display: grid; justify-items: center; gap: 3px; padding: 6px; text-decoration: none; color: var(--muted); font-size: 13px; font-weight: 600; border-radius: 10px; }
 .bottomnav a svg { width: 22px; height: 22px; }
 .bottomnav a[aria-current='page'] { color: var(--fg); }
@@ -693,7 +689,6 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .night-wide .daynav { grid-column: 2; width: 340px; }
   .night-wide .daynav .day { font-size: 20px; letter-spacing: -0.02em; }
   .night-wide .filters { grid-column: 3; justify-self: end; flex-wrap: nowrap; }
-  .tally-split { grid-template-columns: 1fr 1fr; }
   .lineup-cols { grid-template-columns: 1fr 1fr; }
   /* Top padding 14px: the close button then sits 10px from the top and 10px from the right. */
   .sheet { margin: auto; border-radius: 20px; border-bottom: 1px solid var(--line); padding-top: 14px; padding-bottom: 20px; max-height: calc(100dvh - 48px); }
@@ -716,7 +711,6 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .match-grid, .match-main, .match-aside { display: grid; gap: 16px; min-width: 0; }
   .match-aside { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
   .match-aside > :first-child { grid-row: span 2; }
-  .tally-split { grid-template-columns: 1fr; }
 }
 @media (min-width: 1400px) {
   .match-grid { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
@@ -750,7 +744,7 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .prow .rank { display: none; }
   .gbox { font-size: 15px; }
   .prow .n { font-size: 15px; }
-  .datechip { display: none; }
+  .club-chip { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .seg.live, .chip.live::before, .wave, .mini i.live, .sk { animation: none; }

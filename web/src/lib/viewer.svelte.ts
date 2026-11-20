@@ -1,5 +1,6 @@
-// Whose club is on screen. Public pages (/c/{club}/…) work without a login and are read-only;
-// a logged-in member of that club gets the normal, editable app on the same link.
+// Whose club is on screen. Every page of a club is "/c/{club}/…": the same link for everyone.
+// Without a login, or for another club, the page is read-only; a logged-in member of that
+// club gets the editable app on the same link.
 
 import { session } from './session.svelte';
 

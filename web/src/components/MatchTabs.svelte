@@ -6,6 +6,7 @@
   let { section, matchId }: { section: 'match' | 'lineup'; matchId: string } = $props();
 </script>
 
+<!-- One view only (a visitor): no tabs. -->
 <nav class="match-tabs hide-mobile" aria-label="Wedstrijd">
   <a href={urls.match(matchId)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
   <a href={urls.lineup(matchId)} onclick={link} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>

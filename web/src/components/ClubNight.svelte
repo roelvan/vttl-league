@@ -1,5 +1,7 @@
 <script lang="ts">
   import NightCardView from './NightCardView.svelte';
+  import PlayerPopover from './match/PlayerPopover.svelte';
+  import { warmPlayers } from '../lib/players.svelte';
   import Icon from './Icon.svelte';
   import { ws, loadDay } from '../lib/workspace.svelte';
   import { nightCard, matchesOn, matchDays } from '../lib/night';
@@ -35,6 +37,20 @@
     return e && !e.draft ? e.view : undefined;
   };
   const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, stored(r.matchId), wide ? ws.entries[r.matchId]?.view : undefined)));
+
+  /** The player widget: one for all cards. */
+  let info: ReturnType<typeof PlayerPopover> | undefined = $state();
+  /** The players of the line-ups shown, as text: the server gets them ready for the player widget. */
+  const playerIds = $derived(
+    cards
+      .flatMap((c) => (c.lineup ? [...c.lineup.home, ...c.lineup.away] : []))
+      .map((r) => r.person.id ?? 0)
+      .filter((n) => n > 0)
+      .join(','),
+  );
+  $effect(() => {
+    if (playerIds) warmPlayers(playerIds.split(',').map(Number));
+  });
   const shown = $derived(
     cards.filter((c) => (filter === 'all' ? true : c.state === filter)),
   );
@@ -68,9 +84,11 @@
   {/if}
 </div>
 
+<PlayerPopover bind:this={info} />
+
 <div class="night-list" style="--n: {Math.max(shown.length, 1)}">
   {#each shown as c (c.row.matchId)}
-    <NightCardView card={c} current={c.row.matchId === currentId} {wide} />
+    <NightCardView card={c} current={c.row.matchId === currentId} {wide} oninfo={(at, who) => info?.show(at, who)} />
   {:else}
     <div class="card empty">
       {#if !loaded}

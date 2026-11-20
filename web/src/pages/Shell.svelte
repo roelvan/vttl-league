@@ -8,15 +8,16 @@
   import MatchPage from './MatchPage.svelte';
   import LineUpPage from './LineUpPage.svelte';
   import SettingsPage from './SettingsPage.svelte';
+  import ClubSearch from './ClubSearch.svelte';
   import Dialog from '../dialogs/Dialog.svelte';
   import PrintDialog from '../dialogs/PrintDialog.svelte';
   import UploadDialog from '../dialogs/UploadDialog.svelte';
   import PrintSheet from '../components/print/PrintSheet.svelte';
   import RefereeSlips from '../components/print/RefereeSlips.svelte';
-  import { route, match } from '../lib/router.svelte';
-  import { matchIdFromSlug, urls, type MenuAction } from '../lib/nav';
+  import { route, match, navigate } from '../lib/router.svelte';
+  import { matchIdFromSlug, clubPath, urls, type MenuAction } from '../lib/nav';
   import { data, loadCategories, loadClubs, loadMatches, loadPublicMatches } from '../lib/data.svelte';
-  import { viewer, viewClub, publicClub } from '../lib/viewer.svelte';
+  import { viewer, publicClub } from '../lib/viewer.svelte';
   import { ws, connect, scheduleFlush, ensureMatch, preloadDay, setCurrent, onServerEvent } from '../lib/workspace.svelte';
   import { matchesOn } from '../lib/night';
   import { onBoardMessage, loadDevices } from '../lib/boards.svelte';
@@ -39,21 +40,34 @@
   });
 
   // ---------------------------------------------------------------- route
-  // "/c/{club}/…" = the public pages of a club (no login needed); without it: the own club.
+  // "/c/{club}/…" = the pages of a club: one URL for everyone, no login needed. A path without
+  // a club (the root, an old link) goes to the own club, or to the club search without a login.
   const m = $derived.by(() => {
     const pm = /^\/c\/([^/]+)(\/.*)?$/.exec(route.path);
     const club = pm ? decodeURIComponent(pm[1]) : null;
     const p = pm ? (pm[2] ?? '/') : route.path;
     let r: Record<string, string> | null;
-    if ((r = match('/wedstrijd/:id/opstelling', p))) return { club, section: 'lineup' as const, id: matchIdFromSlug(r.id), day: null };
-    if ((r = match('/wedstrijd/:id', p))) return { club, section: 'match' as const, id: matchIdFromSlug(r.id), day: null };
-    if ((r = match('/dag/:day', p)) && /^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { club, section: 'night' as const, id: null, day: r.day };
-    if (p === '/instellingen' && !club && session.me) return { club, section: 'other' as const, id: null, day: null };
-    return { club, section: 'night' as const, id: null, day: playDayIso() };
+    if (!club) {
+      if (p === '/instellingen' && session.me) return { club, section: 'other' as const, id: null, day: null, rest: p };
+      // "/clubs": the club search, also with a login. Any other path is an old link.
+      return { club, section: 'clubs' as const, id: null, day: null, rest: p === '/clubs' ? '/' : p, pick: p === '/clubs' };
+    }
+    if ((r = match('/wedstrijd/:id/opstelling', p))) return { club, section: 'lineup' as const, id: matchIdFromSlug(r.id), day: null, rest: p };
+    if ((r = match('/wedstrijd/:id', p))) return { club, section: 'match' as const, id: matchIdFromSlug(r.id), day: null, rest: p };
+    if ((r = match('/dag/:day', p)) && /^\d{4}-\d{2}-\d{2}$/.test(r.day)) return { club, section: 'night' as const, id: null, day: r.day, rest: p };
+    return { club, section: 'night' as const, id: null, day: playDayIso(), rest: p };
   });
 
   $effect.pre(() => {
     viewer.club = m.club;
+  });
+  const ownClub = $derived(session.me?.account.club ?? null);
+  $effect(() => {
+    if (m.section === 'clubs' && !m.pick && ownClub) navigate(clubPath(ownClub, m.rest), true);
+  });
+  // The club search shows the last club first.
+  $effect(() => {
+    if (m.club) try { localStorage.setItem('vl.lastclub', m.club); } catch {}
   });
   const pub = $derived(publicClub());
   const inMatch = $derived(m.section === 'match' || m.section === 'lineup');
@@ -102,10 +116,17 @@
 
   const homeMatch = $derived(!publicClub() && isHomeMember(sheet) && (row?.isHome ?? true));
   const ourMatch = $derived(homeMatch && canEdit(sheet));
+  // The line-up page is a form: only members of the home club get it. All others see the
+  // line-up on the match page.
+  $effect(() => {
+    if (m.section === 'lineup' && m.id && sheet && !session.loading && !homeMatch) navigate(urls.match(m.id), true);
+  });
   /** The page heading for screen readers; the visible headings start at h2. */
   const pageTitle = $derived(
     m.section === 'other'
       ? 'Instellingen'
+      : m.section === 'clubs'
+        ? 'Kies een club'
       : m.section === 'night'
         ? 'Clubavond'
         : `${m.section === 'lineup' ? 'Opstelling' : 'Wedstrijd'}${sheet ? `: ${sheet.home.name} – ${sheet.away.name}` : ''}`,
@@ -116,12 +137,11 @@
 
   async function onaction(a: MenuAction) {
     if (a === 'share') {
-      const club = viewClub();
-      if (!club) return;
-      const url = `${location.origin}${urls.share(club, m.id, day)}`;
+      // The address is the same for everyone: a visitor without a login follows live with it.
+      const url = location.href;
       try {
         await navigator.clipboard.writeText(url);
-        ws.message = 'Publieke link gekopieerd. Iedereen met de link kan de wedstrijd live volgen.';
+        ws.message = 'Link gekopieerd. Iedereen met de link kan live volgen, zonder aanmelden.';
       } catch {
         prompt('Kopieer de link:', url);
       }
@@ -156,7 +176,7 @@
 <TopBar
   matchId={m.id}
   {day}
-  datechip={!row && pub ? (data.publicMatches[pub]?.club?.name ?? pub) : ''}
+  clubName={m.section === 'clubs' ? '' : pub ? (data.publicMatches[pub]?.club?.name ?? pub) : (session.me?.club?.name ?? '')}
   {onaction}
   printActions={homeMatch}
   matchActions={ourMatch}
@@ -172,14 +192,20 @@
 
   <main class="view">
     <h1 class="sr-only">{pageTitle} · VTTL Competitie</h1>
-    {#if m.section === 'night'}
+    {#if m.section === 'clubs'}
+      {#if m.pick || !ownClub}<ClubSearch rest={m.rest} />{/if}
+    {:else if m.section === 'night'}
       <div class="view night-wide"><ClubNight {day} {rows} loaded={!!list} wide /></div>
     {:else if m.section === 'match' && m.id}
-      <MatchTabs section="match" matchId={m.id} />
+      {#if homeMatch}<MatchTabs section="match" matchId={m.id} />{/if}
       {#key m.id}<MatchPage matchId={m.id} {row} {onaction} canPrint={homeMatch} />{/key}
     {:else if m.section === 'lineup' && m.id}
-      <MatchTabs section="lineup" matchId={m.id} />
-      {#key m.id}<LineUpPage matchId={m.id} {row} />{/key}
+      {#if homeMatch}
+        <MatchTabs section="lineup" matchId={m.id} />
+        {#key m.id}<LineUpPage matchId={m.id} {row} />{/key}
+      {:else}
+        <div class="card empty"><p>Wedstrijd laden…</p></div>
+      {/if}
     {:else}
       <SettingsPage />
     {/if}
@@ -187,7 +213,7 @@
   </main>
 </div>
 
-{#if (m.section === 'match' || m.section === 'lineup') && m.id}<BottomNav section={m.section} matchId={m.id} {day} />{/if}
+{#if (m.section === 'match' || m.section === 'lineup') && m.id}<BottomNav section={m.section} matchId={m.id} {day} lineup={homeMatch} />{/if}
 <Toast />
 
 {#if dialog?.kind === 'print' && m.id}

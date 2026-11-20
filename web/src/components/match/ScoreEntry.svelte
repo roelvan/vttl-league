@@ -3,6 +3,7 @@
   // scoreboard's job. Shows the VTTL upload notation as you type.
   import { untrack } from 'svelte';
   import Dialog from '../../dialogs/Dialog.svelte';
+  import PlayerPopover, { whoOf } from './PlayerPopover.svelte';
   import Icon from '../Icon.svelte';
   import type { Sheet, SetScore } from '../../lib/sheet/types';
   import type { GameView } from '../../lib/live';
@@ -184,14 +185,27 @@
       save();
     }
   }
+  /** The player widget of this dialog, opened from a ranking. */
+  let info: ReturnType<typeof PlayerPopover> | undefined = $state();
 </script>
 
 <!-- The ranking in the team colour, as on the match cards. A double: the two ranks, one above the other. -->
 {#snippet rank(side: 'home' | 'away')}
   {@const people = game[side].people}
-  <span class="rank-tag {tone(side === 'home' ? 'h' : 'a', flip)}" class:pair={people.length > 1}>
-    {#each people.length ? people : [null] as p, i (i)}<span>{p?.ranking || '–'}</span>{/each}
-  </span>
+  {@const one = people.length === 1 && people[0].id ? people[0] : null}
+  {#if one}
+    <button
+      class="rank-tag {tone(side === 'home' ? 'h' : 'a', flip)}"
+      type="button"
+      aria-label="Spelerinfo {one.full}, {one.ranking || 'geen klassement'}"
+      aria-haspopup="dialog"
+      onclick={(e) => info?.show(e.currentTarget, whoOf(one, side, sheet[side].name, flip))}
+    ><span>{one.ranking || '–'}</span></button>
+  {:else}
+    <span class="rank-tag {tone(side === 'home' ? 'h' : 'a', flip)}" class:pair={people.length > 1}>
+      {#each people.length ? people : [null] as p, i (i)}<span>{p?.ranking || '–'}</span>{/each}
+    </span>
+  {/if}
 {/snippet}
 
 <!-- One set score of a side. "l" is always the home score in the record. -->
@@ -290,4 +304,6 @@
       <button class="btn big" type="button" onclick={save}>Klaar</button>
     {/if}
   {/snippet}
+  <!-- Inside the dialog: the page behind a modal dialog is inert, and its widget with it. -->
+  <PlayerPopover bind:this={info} />
 </Dialog>

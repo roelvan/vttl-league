@@ -1,4 +1,4 @@
-import { api, ApiError, onConnectivity } from './api';
+import { api, ApiError, onConnectivity, onUnauthorized } from './api';
 import type { Me } from './types';
 
 export const session = $state<{ me: Me | null; loading: boolean; online: boolean; offlineKind: 'network' | 'portal' | null }>({
@@ -19,6 +19,9 @@ addEventListener('offline', () => {
 });
 
 const ME_KEY = 'vl.me';
+
+// A session that ended: the pages stay open and become read-only.
+onUnauthorized(() => setMe(null));
 
 export async function loadMe() {
   // Show the last known user at once; correct it when the server answers.

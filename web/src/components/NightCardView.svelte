@@ -5,14 +5,23 @@
   import { boards, boardFor, deviceAlias } from '../lib/boards.svelte';
   import type { GameSide } from '../lib/live';
   import TimeoutBadge from './match/TimeoutBadge.svelte';
-  import NightLineup from './NightLineup.svelte';
+  import LineupDuels from './LineupDuels.svelte';
+  import { whoOf, type Who } from './match/PlayerPopover.svelte';
   import { ownIsAway, tone } from '../lib/viewer.svelte';
 
   let {
     card,
     current = false,
     wide = false,
-  }: { card: NightCard; current?: boolean; /** The overview: also shows the games in progress. */ wide?: boolean } = $props();
+    oninfo,
+  }: {
+    card: NightCard;
+    current?: boolean;
+    /** The overview: also shows the games in progress. */
+    wide?: boolean;
+    /** Opens the player widget next to `at`. */
+    oninfo?: (at: HTMLElement, who: Who) => void;
+  } = $props();
 
   const r = $derived(card.row);
   const hasScore = $derived(card.homeScore !== null);
@@ -42,6 +51,7 @@
         cls,
         name: (s.people.length === 1 ? s.people[0].full : s.people.map((p) => p.last).join(' / ')) || '–',
         rank: s.people.length === 1 ? s.people[0].ranking : '',
+        one: s.people.length === 1 && s.people[0].id ? s.people[0] : null,
         sets: sets[i],
         lead: sets[i] > sets[1 - i],
         pts: pts ? pts[i] : null,
@@ -89,7 +99,10 @@
           {#each c.sides as s (s.cls)}
             <span class="tl-n">
               <i class="letter {s.cls}"></i><span class="n">{s.name}</span>
-              {#if s.rank}<span class="rank">{s.rank}</span>{/if}
+              {#if s.rank && s.one && oninfo}
+                {@const one = s.one}
+                <button class="rank" type="button" aria-label="Spelerinfo {one.full}, {s.rank}" aria-haspopup="dialog" onclick={(e) => oninfo(e.currentTarget, whoOf(one, s.cls === 'h' ? 'home' : 'away', s.cls === 'h' ? r.homeTeam : r.awayTeam, flip))}>{s.rank}</button>
+              {:else if s.rank}<span class="rank">{s.rank}</span>{/if}
               {#if s.serves !== null}<span class="serve" class:off={!s.serves}></span>{/if}
             </span>
             <span class="tl-p">{s.pts ?? ''}</span>
@@ -105,7 +118,8 @@
     </div>
   {/if}
   {#if wide && card.lineup}
-    <NightLineup lineup={card.lineup} names={{ home: r.homeTeam, away: r.awayTeam }} {flip} />
+    <LineupDuels lineup={card.lineup} names={{ home: r.homeTeam, away: r.awayTeam }} {flip}
+      oninfo={oninfo ? (at, p, side) => oninfo(at, whoOf(p, side, side === 'home' ? r.homeTeam : r.awayTeam, flip)) : undefined} />
   {/if}
   <div class="tm-top">
     <span>{card.total ? `${card.played} / ${card.total} gespeeld` : r.matchId}</span><span class="spacer"></span><span>{card.tables}</span>

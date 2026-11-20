@@ -96,6 +96,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/devices", get(boards::list_devices).put(boards::save_device).delete(boards::delete_device))
         .route("/api/boards", get(boards::states))
         .route("/api/boards/link", post(boards::link))
+        .route("/api/public/clubs", get(public::clubs))
         .route("/api/public/club", get(public::club))
         .route("/api/public/sheets", get(public::sheets))
         .route("/api/public/sheet", get(public::sheet))
@@ -294,7 +295,7 @@ async fn club(State(app): State<Arc<App>>, u: User, Query(q): Query<SeasonQuery>
 
 async fn clubs(State(app): State<Arc<App>>, u: User, Query(q): Query<SeasonQuery>) -> R<Vec<tabt::Club>> {
     let season = season_or_current(&app, &u, q.season).await?;
-    Ok(Json(app.tabt.clubs(&u.creds, season).await.map_err(ApiError::vttl)?))
+    Ok(Json(app.tabt.clubs(Some(&u.creds), season).await.map_err(ApiError::vttl)?))
 }
 
 /// A row in the match list: a match without the details, plus what the list needs.

@@ -17,6 +17,14 @@ export interface BoardLink {
   player2: { first: string; last: string };
 }
 
+/** A club in the club search list. */
+export interface ClubLine {
+  id: string;
+  name: string;
+  longName: string;
+  categoryName: string;
+}
+
 export interface StoredSheet {
   id: string;
   rev: number;
@@ -74,6 +82,12 @@ function report(online: boolean, kind?: 'network' | 'portal') {
   for (const l of listeners) l(online, kind);
 }
 
+/** Called when the server says the session is gone (not for a wrong password at the login). */
+let unauthorized: () => void = () => {};
+export function onUnauthorized(f: () => void) {
+  unauthorized = f;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
@@ -104,6 +118,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   report(true);
   const data = await res.json();
+  if (res.status === 401 && path !== '/api/login') unauthorized();
   if (!res.ok) throw new ApiError(res.status, data.error ?? 'error', data.message ?? res.statusText);
   return data as T;
 }
@@ -145,6 +160,7 @@ export const api = {
   boardStates: () => request<BoardState[]>('GET', '/api/boards'),
   linkBoard: (b: BoardLink) => request<BoardState>('POST', '/api/boards/link', b),
   // Public, read-only (no login): anyone with the link follows live.
+  publicClubs: () => request<ClubLine[]>('GET', '/api/public/clubs'),
   publicClub: (club: string) => request<MatchList & { club: Club | null }>('GET', `/api/public/club?club=${encodeURIComponent(club)}`),
   publicSheets: (club: string, day: string) =>
     request<StoredSheet[]>('GET', `/api/public/sheets?club=${encodeURIComponent(club)}&day=${encodeURIComponent(day)}`),

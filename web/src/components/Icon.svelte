@@ -2,7 +2,7 @@
   // Line icons from the design (24x24, stroke = currentColor).
   type Name =
     | 'match' | 'night' | 'lineup' | 'sun' | 'moon' | 'more' | 'plus' | 'close' | 'chevron' | 'left' | 'right'
-    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats' | 'edit' | 'trash' | 'rows' | 'columns' | 'trophy' | 'up';
+    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats' | 'edit' | 'trash' | 'rows' | 'columns' | 'trophy' | 'up' | 'club' | 'search';
   let { name, size = 20 }: { name: Name; size?: number } = $props();
 </script>
 
@@ -47,6 +47,10 @@
     <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
   {:else if name === 'captain'}
     <circle cx="12" cy="12" r="9" /><path d="M15 9.5a3.5 3.5 0 1 0 0 5" />
+  {:else if name === 'club'}
+    <path d="M5 21V4" /><path d="M5 4h14l-3 4.5 3 4.5H5" />
+  {:else if name === 'search'}
+    <circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" />
   {:else if name === 'user'}
     <circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
   {:else if name === 'logout'}

@@ -5,7 +5,6 @@
   import TimeoutBadge from './TimeoutBadge.svelte';
   import TimeoutUsed from './TimeoutUsed.svelte';
   import { tone } from '../../lib/viewer.svelte';
-  import { MediaQuery } from 'svelte/reactivity';
 
   let {
     game,
@@ -39,7 +38,6 @@
   } = $props();
 
   /** A phone: the tile has no room for an info button, so the rank tag opens the player widget. */
-  const narrow = new MediaQuery('(max-width: 599px)');
 
   const started = $derived(game.state === 'final' || game.state === 'live' || game.state === 'error' || game.home.cells.some(Boolean));
   // While the board counts, its finished sets are not in the match record yet.
@@ -85,7 +83,7 @@
     if (one) oninfo?.(e.currentTarget, one, cls === 'h' ? 'home' : 'away');
   }}
   <div class="mt-row" class:lose={game.winner && game.winner !== cls} class:bare={!started}>
-    {#if one && narrow.current}
+    {#if one}
       <button class="rank-tag {tone(cls, flip)}" type="button" aria-label="Spelerinfo {one.full}, {one.ranking || 'geen klassement'}" aria-haspopup="dialog" onclick={info}>
         <span>{one.ranking || '–'}</span>
       </button>
@@ -96,11 +94,6 @@
     {/if}
     <span class="mt-name">
       <span class="n" title={side.people.map((p) => p.full).join(' / ')}>{@render name(side.people)}</span>
-      {#if one && !narrow.current}
-        <button class="who-info sm" type="button" aria-label="Spelerinfo {one.full}" aria-haspopup="dialog" onclick={info}>
-          <Icon name="info" size={16} />
-        </button>
-      {/if}
       {#if game.winner === cls}<span class="trophy"><Icon name="trophy" size={16} /></span>{/if}
       {#if used?.[idx] && !(tmo && tmo.owner === idx + 1)}
         <TimeoutUsed />

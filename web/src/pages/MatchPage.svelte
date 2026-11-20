@@ -3,16 +3,16 @@
   import TableCard from '../components/match/TableCard.svelte';
   import MatchOrder from '../components/match/MatchOrder.svelte';
   import PlayersTally from '../components/match/PlayersTally.svelte';
-  import PlayerPopover from '../components/match/PlayerPopover.svelte';
+  import PlayerPopover, { whoOf } from '../components/match/PlayerPopover.svelte';
   import MatchDetails from '../components/match/MatchDetails.svelte';
   import ScoreEntry from '../components/match/ScoreEntry.svelte';
   import StatsDialog from '../components/match/StatsDialog.svelte';
   import Icon from '../components/Icon.svelte';
   import { ws, change } from '../lib/workspace.svelte';
-  import { liveView, tally, type GameView, type Person, type Side, type TallyRow } from '../lib/live';
+  import { liveView, tally, type GameView, type Person, type Side } from '../lib/live';
   import { shortDivision } from '../lib/night';
   import { canEdit } from '../lib/access';
-  import { ownIsAway, tone } from '../lib/viewer.svelte';
+  import { ownIsAway } from '../lib/viewer.svelte';
   import { warmPlayers } from '../lib/players.svelte';
   import { boardFor, liveGamesFor, playFor, sendToBoard, timeoutsUsedFor } from '../lib/boards.svelte';
   import { link } from '../lib/router.svelte';
@@ -70,8 +70,8 @@
   const liveGames = $derived(view ? liveGamesFor(matchId, view) : {});
   const timeoutsUsed = $derived(sheet && view ? timeoutsUsedFor(matchId, sheet, view) : {});
 
-  /** Keys of the rows picked (clicked) in the Spelers card: only their games are shown. */
-  let picked = $state<string[]>([]);
+  /** Key of the row that a click keeps on in the Spelers card: only its games are shown. */
+  let pinned = $state<string | null>(null);
   /** Key of the row under the pointer: its games stand out, the others are dimmed. */
   let hovered = $state<string | null>(null);
   function gamesOf(keys: string[]): Set<number> | null {
@@ -79,7 +79,7 @@
     const rows = [...tally(sheet, view, 'home'), ...tally(sheet, view, 'away')].filter((r) => keys.includes(r.key));
     return new Set(rows.flatMap((r) => r.games));
   }
-  const only = $derived(gamesOf(picked));
+  const only = $derived(gamesOf(pinned ? [pinned] : []));
   const focus = $derived(hovered ? gamesOf([hovered]) : null);
   /** The decided games of the row under the pointer: won or lost by its side. */
   const marks = $derived.by(() => {
@@ -91,16 +91,15 @@
   });
   $effect(() => {
     void matchId;
-    picked = [];
+    pinned = null;
     hovered = null;
   });
-  const togglePlayer = (r: TallyRow) => (picked = picked.includes(r.key) ? picked.filter((k) => k !== r.key) : [...picked, r.key]);
 
   /** The player widget: one for the page, opened from the Spelers card and from the game tiles. */
   let info: ReturnType<typeof PlayerPopover> | undefined = $state();
   function showInfo(at: HTMLElement, p: Person, side: Side) {
     if (!sheet || !p.id) return;
-    info?.show(at, { id: p.id, name: p.full, ranking: p.ranking, team: sheet[side].name, cls: tone(side === 'home' ? 'h' : 'a', flip) });
+    info?.show(at, whoOf(p, side, sheet[side].name, flip));
   }
 
   /** The game whose scoreboard statistics are open. */
@@ -152,17 +151,18 @@
               onenter={(g) => (entry = g.index)}
               onsend={(g) => sendToBoard(matchId, sheet, t, g)}
               onstats={(g) => (stats = g.index)}
+              oninfo={showInfo}
               onsets={(g, sets) => change(matchId, [{ p: ['results', g.index], v: sets }])}
             />
           {/each}
         </section>
       {/if}
 
-      <MatchOrder {view} {flip} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} {marks} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} oninfo={showInfo} />
+      <MatchOrder {view} {flip} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} {marks} onclearfocus={() => (pinned = null)} onopen={(g) => (entry = g.index)} oninfo={showInfo} />
     </div>
 
     <div class="match-aside">
-      <PlayersTally {sheet} {view} {flip} {picked} ontoggle={togglePlayer} onhover={(r) => (hovered = r?.key ?? null)} oninfo={showInfo} />
+      <PlayersTally {sheet} {view} {flip} bind:pinned onhover={(r) => (hovered = r?.key ?? null)} oninfo={showInfo} />
       <MatchDetails {sheet} {view} onaction={canPrint ? onaction : undefined} canUpload={editable} division={row?.divisionName ?? ''} />
       {#if editable}
         <a class="card prep" href={urls.lineup(matchId)} onclick={link}>

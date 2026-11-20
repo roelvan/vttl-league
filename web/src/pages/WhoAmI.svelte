@@ -1,7 +1,8 @@
 <script lang="ts">
   import { api, ApiError, OfflineError } from '../lib/api';
   import { session, setMe } from '../lib/session.svelte';
-  import { navigate } from '../lib/router.svelte';
+  import { navigate, route } from '../lib/router.svelte';
+  import { safeReturn } from '../lib/nav';
   import { playerName } from '../lib/format';
   import type { Member } from '../lib/types';
   import Credit from '../components/Credit.svelte';
@@ -12,6 +13,7 @@
   let error = $state('');
   let timer: ReturnType<typeof setTimeout>;
   let seq = 0;
+  const back = () => navigate(safeReturn(route.query.get('terug')), true);
 
   function onInput() {
     clearTimeout(timer);
@@ -40,7 +42,7 @@
     busy = true;
     try {
       setMe(await api.setMember(m.uniqueIndex));
-      navigate('/', true);
+      back();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Opslaan mislukt.';
       busy = false;
@@ -58,7 +60,7 @@
         </p>
         {#if session.me?.account.member}
           <p>Nu gekozen: <strong>{session.me.account.memberName}</strong> ({session.me.account.club})</p>
-          <button class="btn ghost" type="button" onclick={() => navigate('/', true)}>← Terug naar de clubavond</button>
+          <button class="btn ghost" type="button" onclick={back}>← Terug</button>
         {/if}
         <!-- svelte-ignore a11y_autofocus -->
         <input type="search" placeholder="Familienaam of voornaam" bind:value={query} oninput={onInput} autofocus aria-label="Zoek op naam" />

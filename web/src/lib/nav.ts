@@ -1,4 +1,4 @@
-import { publicClub } from './viewer.svelte';
+import { viewClub } from './viewer.svelte';
 
 // URLs of the app. A VTTL match id has a slash ("PWVL03/045"); in a URL it becomes a dash.
 
@@ -9,11 +9,18 @@ export function matchIdFromSlug(slug: string) {
   return i < 0 ? slug : `${slug.slice(0, i)}/${slug.slice(i + 1)}`;
 }
 
-/** "/c/{club}" on public pages (another club, or no login), else "". */
+/** The pages of a club: the same URL for everyone, with or without a login. */
+export const clubPath = (club: string, rest = '') => `/c/${encodeURIComponent(club)}${rest === '/' ? '' : rest}`;
+
+/** "/c/{club}" of the club on screen; "" while no club is known (the club search page). */
 const prefix = () => {
-  const c = publicClub();
-  return c ? `/c/${encodeURIComponent(c)}` : '';
+  const c = viewClub();
+  return c ? clubPath(c) : '';
 };
+
+/** Where a login returns to: only a path of this app. */
+export const safeReturn = (to: string | null | undefined) => (to && to.startsWith('/') && !to.startsWith('//') && !to.startsWith('/login') ? to : '/');
+export const loginUrl = (back: string) => `/login?terug=${encodeURIComponent(back)}`;
 
 export const urls = {
   home: () => prefix() || '/',
@@ -21,9 +28,6 @@ export const urls = {
   match: (matchId: string) => `${prefix()}/wedstrijd/${matchSlug(matchId)}`,
   lineup: (matchId: string) => `${prefix()}/wedstrijd/${matchSlug(matchId)}/opstelling`,
   settings: () => '/instellingen',
-  /** The link to share: always with the club, so it works for everyone without a login. */
-  share: (club: string, matchId: string | null, day: string) =>
-    `/c/${encodeURIComponent(club)}${matchId ? `/wedstrijd/${matchSlug(matchId)}` : `/dag/${day}`}`,
 };
 
 /** ISO day plus or minus n days. */

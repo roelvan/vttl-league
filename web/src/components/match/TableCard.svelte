@@ -3,7 +3,7 @@
   import Icon from '../Icon.svelte';
   import TimeoutBadge from './TimeoutBadge.svelte';
   import TimeoutUsed from './TimeoutUsed.svelte';
-  import type { TableView, GameView, GameSide, BoardLive } from '../../lib/live';
+  import type { TableView, GameView, GameSide, BoardLive, Person, Side } from '../../lib/live';
   import type { SetScore } from '../../lib/sheet/types';
   import type { MatchSystem } from '../../lib/sheet/systems';
   import { setWinner, isEmptySet } from '../../lib/sheet/score';
@@ -17,6 +17,7 @@
     onenter,
     onsend,
     onstats,
+    oninfo,
     onsets,
     sys,
     flip = false,
@@ -29,6 +30,8 @@
     onsend?: (g: GameView) => void;
     /** Opens the statistics of the game on the board. */
     onstats?: (g: GameView) => void;
+    /** Opens the player widget next to `at` (the ranking). */
+    oninfo?: (at: HTMLElement, p: Person, side: Side) => void;
     /** Saves the set scores typed in the set boxes. Without it the boxes only show. */
     onsets?: (g: GameView, sets: SetScore[]) => void;
     /** The match system: closes the sets after the one that decides the game. */
@@ -148,7 +151,14 @@
     <span class="pname">
       {#if linked}<span class="serve" class:off={board?.server !== cls}></span>{/if}
       <span class="n">{side.people.map((p) => p.full).join(' / ') || 'Nog niet opgesteld'}</span>
-      {#if side.people.length === 1 && side.people[0].ranking}<span class="rank">{side.people[0].ranking}</span>{/if}
+      {#if side.people.length === 1 && side.people[0].ranking}
+        {@const one = side.people[0]}
+        {#if oninfo && one.id}
+          <button class="rank" type="button" aria-label="Spelerinfo {one.full}, {one.ranking}" aria-haspopup="dialog" onclick={(e) => oninfo(e.currentTarget, one, cls === 'h' ? 'home' : 'away')}>{one.ranking}</button>
+        {:else}
+          <span class="rank">{one.ranking}</span>
+        {/if}
+      {/if}
       {#if tmo?.active && tmo.owner === i + 1}
         <TimeoutBadge timeout={tmo} compact who={i === 0 ? 'thuis' : 'bezoekers'} />
       {:else if used}
