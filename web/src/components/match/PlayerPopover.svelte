@@ -131,7 +131,7 @@
           {/each}
         </ul>
       {:else}
-        <p class="pp-note">Nog geen enkelwedstrijden dit seizoen.</p>
+        <p class="pp-note">Geen wedstrijden dit seizoen.</p>
       {/if}
       <p class="pp-foot">VTTL · {ago(info.fetchedAt, Date.now())}</p>
     {:else if entry?.error}

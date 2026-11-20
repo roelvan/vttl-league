@@ -2,7 +2,7 @@
 
 import type { MatchRow } from './types';
 import type { Sheet } from './sheet/types';
-import { liveView } from './live';
+import { liveView, type TableView } from './live';
 import { byTeam } from './format';
 import { SYSTEMS } from './sheet/systems';
 
@@ -33,6 +33,10 @@ export interface NightCard {
   tables: string;
   /** From our point of view. */
   outcome: 'won' | 'lost' | 'draw' | null;
+  /** The tables with a game in progress (own home matches only). */
+  live: TableView[];
+  /** Sets of a game in this match system. */
+  boxes: number;
 }
 
 function parseScore(s: string): [number, number] | null {
@@ -43,7 +47,7 @@ function parseScore(s: string): [number, number] | null {
 export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
   const division = shortDivision(row.divisionName ?? '');
   if (row.isBye) {
-    return { row, division, isHome: row.isHome, homeScore: null, awayScore: null, segments: [], played: 0, total: 0, state: 'bye', tables: '', outcome: null };
+    return { row, division, isHome: row.isHome, homeScore: null, awayScore: null, segments: [], played: 0, total: 0, state: 'bye', tables: '', outcome: null, live: [], boxes: 0 };
   }
   let homeScore: number | null = null;
   let awayScore: number | null = null;
@@ -52,6 +56,8 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
   let total = 0;
   let state: NightState = 'soon';
   let tables = row.isHome ? '' : 'Uit';
+  let live: TableView[] = [];
+  let boxes = 0;
 
   // Our own home matches: the stored record is the live truth. Away matches: VTTL only.
   if (sheet && row.isHome) {
@@ -63,6 +69,8 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
       played = v.games.filter((g) => g.state === 'final').length;
       segments = v.games.map((g) => (g.winner ?? (g.state === 'live' ? 'live' : '')));
       state = v.complete ? 'final' : v.started ? 'live' : 'soon';
+      if (state === 'live') live = v.tables.filter((t) => t.current);
+      boxes = v.sys.boxes;
     } catch {
       // Unknown match system: fall back to the VTTL row.
     }
@@ -86,7 +94,7 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
   const ours = row.isHome ? homeScore : awayScore;
   const theirs = row.isHome ? awayScore : homeScore;
   const outcome = state === 'final' && ours !== null && theirs !== null ? (ours > theirs ? 'won' : ours < theirs ? 'lost' : 'draw') : null;
-  return { row, division, isHome: row.isHome, homeScore, awayScore, segments, played, total, state, tables, outcome };
+  return { row, division, isHome: row.isHome, homeScore, awayScore, segments, played, total, state, tables, outcome, live, boxes };
 }
 
 /** The matches of a day, best team first. */

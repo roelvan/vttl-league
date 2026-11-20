@@ -14,7 +14,16 @@
     loaded,
     currentId = null,
     filters = true,
-  }: { day: string; rows: MatchRow[]; loaded: boolean; currentId?: string | null; filters?: boolean } = $props();
+    wide = false,
+  }: {
+    day: string;
+    rows: MatchRow[];
+    loaded: boolean;
+    currentId?: string | null;
+    filters?: boolean;
+    /** The overview of the day: the cards also show the games in progress. */
+    wide?: boolean;
+  } = $props();
 
   type Filter = 'all' | 'live' | 'final';
   let filter = $state<Filter>('all');
@@ -40,26 +49,28 @@
   const go = (d: string | undefined) => d && navigate(urls.day(d));
 </script>
 
-<div class="daynav">
-  <button class="btn ghost" type="button" onclick={() => go(prev)} disabled={!prev} aria-label="Vorige speeldag"><Icon name="left" /></button>
-  <label class="day">
-    {shortDate(day)}{week ? ` · week ${week}` : ''}
-    <input type="date" value={day} onchange={(e) => go(e.currentTarget.value)} aria-label="Kies een datum" />
-  </label>
-  <button class="btn ghost" type="button" onclick={() => go(next)} disabled={!next} aria-label="Volgende speeldag"><Icon name="right" /></button>
+<div class="night-head">
+  <div class="daynav">
+    <button class="btn ghost" type="button" onclick={() => go(prev)} disabled={!prev} aria-label="Vorige speeldag"><Icon name="left" /></button>
+    <label class="day">
+      {shortDate(day)}{week ? ` · week ${week}` : ''}
+      <input type="date" value={day} onchange={(e) => go(e.currentTarget.value)} aria-label="Kies een datum" />
+    </label>
+    <button class="btn ghost" type="button" onclick={() => go(next)} disabled={!next} aria-label="Volgende speeldag"><Icon name="right" /></button>
+  </div>
+
+  {#if filters && cards.length > 1}
+    <div class="filters" role="group" aria-label="Filter ploegen">
+      {#each [['all', 'Alle'], ['live', 'Bezig'], ['final', 'Klaar']] as [k, l] (k)}
+        <button class="seg-btn" type="button" aria-pressed={filter === k} onclick={() => (filter = k as Filter)}>{l}</button>
+      {/each}
+    </div>
+  {/if}
 </div>
 
-{#if filters && cards.length > 1}
-  <div class="filters" role="group" aria-label="Filter ploegen">
-    {#each [['all', 'Alle'], ['live', 'Bezig'], ['final', 'Klaar']] as [k, l] (k)}
-      <button class="seg-btn" type="button" aria-pressed={filter === k} onclick={() => (filter = k as Filter)}>{l}</button>
-    {/each}
-  </div>
-{/if}
-
-<div class="night-list">
+<div class="night-list" style="--n: {Math.max(shown.length, 1)}">
   {#each shown as c (c.row.matchId)}
-    <NightCardView card={c} current={c.row.matchId === currentId} />
+    <NightCardView card={c} current={c.row.matchId === currentId} {wide} />
   {:else}
     <div class="card empty">
       {#if !loaded}

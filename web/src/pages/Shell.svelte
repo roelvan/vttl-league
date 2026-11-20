@@ -56,6 +56,7 @@
     viewer.club = m.club;
   });
   const pub = $derived(publicClub());
+  const inMatch = $derived(m.section === 'match' || m.section === 'lineup');
 
   // Public: the club's match list without login. The live connection and boards follow the club.
   $effect(() => {
@@ -161,8 +162,9 @@
   matchActions={ourMatch}
 />
 
-<div class="shell" class:single={m.section === 'other'}>
-  {#if m.section !== 'other'}
+<!-- The sidebar only goes with an open match: the club night itself uses the full width. -->
+<div class="shell" class:single={!inMatch}>
+  {#if inMatch}
     <aside class="side-night" aria-label="Clubavond">
       <ClubNight {day} {rows} loaded={!!list} currentId={m.id} filters={false} />
     </aside>
@@ -171,10 +173,7 @@
   <main class="view">
     <h1 class="sr-only">{pageTitle} · VTTL Competitie</h1>
     {#if m.section === 'night'}
-      <div class="view-night-only view"><ClubNight {day} {rows} loaded={!!list} currentId={ws.current} /></div>
-      <div class="card empty hide-mobile">
-        <h2>Kies een wedstrijd</h2>
-      </div>
+      <div class="view night-wide"><ClubNight {day} {rows} loaded={!!list} currentId={ws.current} wide /></div>
     {:else if m.section === 'match' && m.id}
       <MatchTabs section="match" matchId={m.id} />
       {#key m.id}<MatchPage matchId={m.id} {row} {onaction} canPrint={homeMatch} />{/key}

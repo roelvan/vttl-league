@@ -8,7 +8,7 @@
   import ScoreEntry from '../components/match/ScoreEntry.svelte';
   import StatsDialog from '../components/match/StatsDialog.svelte';
   import Icon from '../components/Icon.svelte';
-  import { ws } from '../lib/workspace.svelte';
+  import { ws, change } from '../lib/workspace.svelte';
   import { liveView, tally, type GameView, type Person, type Side, type TallyRow } from '../lib/live';
   import { shortDivision } from '../lib/night';
   import { canEdit } from '../lib/access';
@@ -137,12 +137,14 @@
             <TableCard
               table={t}
               boxes={view.sys.boxes}
+              sys={view.sys}
               {editable}
               {flip}
               board={boards[t.index]}
               onenter={(g) => (entry = g.index)}
               onsend={(g) => sendToBoard(matchId, sheet, t, g)}
               onstats={(g) => (stats = g.index)}
+              onsets={(g, sets) => change(matchId, [{ p: ['results', g.index], v: sets }])}
             />
           {/each}
         </section>

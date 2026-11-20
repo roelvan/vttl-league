@@ -264,11 +264,31 @@ button.chip { cursor: pointer; }
 .games { width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; font: 700 22px/1 var(--font); background: var(--surface-2); font-variant-numeric: tabular-nums; }
 .games.lead { background: var(--fg); color: var(--bg); }
 .court-games { display: grid; grid-template-columns: repeat(var(--boxes, 5), minmax(0, 1fr)); gap: 6px; padding: 4px 14px 14px; }
-.gbox { min-width: 0; white-space: nowrap; padding: 8px 4px; border-radius: 8px; background: var(--surface-2); text-align: center; font: 700 17px/1.1 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--muted); }
+.gbox { min-width: 0; white-space: nowrap; padding: 8px 4px; border-radius: 8px; background: var(--surface-2); text-align: center; font: 700 17px/20px var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--muted); }
 .gbox small { display: block; font: 600 12px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
 .gbox .w { color: var(--fg); }
 .gbox .sep { color: var(--muted); }
 .gbox.cur { outline: 1.5px solid var(--live); outline-offset: -1.5px; color: var(--fg); }
+/* Quick entry: a box is a button, and the row of boxes becomes fields while you type. The value
+   line is 20px in every state (text, "Bezig", fields), so nothing moves when the state changes. */
+button.gbox { display: block; width: 100%; border: 0; cursor: pointer; }
+button.gbox:hover { background: color-mix(in srgb, var(--fg) 8%, var(--surface-2)); }
+.gbox.bad { outline: 1.5px solid var(--warn); outline-offset: -1.5px; }
+.gbox.edit { color: var(--fg); }
+.gbox.edit:focus-within { outline: 1.5px solid var(--fg); outline-offset: -1.5px; }
+/* Two score slots with a short dash between them. The score in the active slot is always fully
+   selected, so the slot itself shows the selection. */
+.gbox .pair { display: grid; grid-template-columns: minmax(0, 26px) 5px minmax(0, 26px); column-gap: 3px; justify-content: center; align-items: center; height: 20px; }
+.gbox .pair .sep { height: 2px; border-radius: 1px; background: var(--muted); font-size: 0; }
+.gbox.edit input {
+  display: block; width: 100%; min-width: 0; min-height: 0; height: 20px; padding: 0; border: 0; border-radius: 5px; background: none;
+  text-align: center; font: inherit; font-size: max(16px, 1em); line-height: 20px; letter-spacing: inherit; color: var(--fg);
+  font-variant-numeric: tabular-nums; caret-color: var(--fg);
+}
+.gbox.edit.off { opacity: 0.4; }
+.gbox.edit input:disabled, .gline input:disabled { cursor: not-allowed; }
+.gbox.edit input:focus { background: color-mix(in srgb, var(--fg) 20%, transparent); }
+.gbox.edit input::selection { background: transparent; color: var(--fg); }
 .gbox .playing { display: block; font: 700 11px/20px var(--font); letter-spacing: 0.03em; text-transform: uppercase; color: var(--live); }
 .court-idle { padding: 18px 14px; color: var(--muted); font-size: 15px; }
 .court-f { display: grid; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 15px; color: var(--muted); font-weight: 600; margin-top: auto; }
@@ -432,6 +452,28 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
 .tm-mid .ts { font: 700 20px/1 var(--font); letter-spacing: -0.02em; text-align: right; font-variant-numeric: tabular-nums; }
 .tm-mid .ours { color: var(--fg); }
 .tm-mid .them { color: var(--muted); }
+.night-head { display: contents; }
+/* The overview of the day: as many columns as fit, and the games in progress in each card. */
+/* One column of the full width: an auto column takes the width of all cards in one row. */
+.night-wide { grid-template-columns: minmax(0, 1fr); }
+/* --n = the number of cards: a short evening stays a centred group under the day, a full one fills the width. */
+.night-wide .night-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  width: 100%; max-width: calc(var(--n, 1) * 440px); justify-self: center;
+}
+/* No matches: a plain message under the day, not one lone card in the first column. */
+.night-wide .night-list > .empty { grid-column: 1 / -1; background: none; border: 0; box-shadow: none; padding: 48px 16px; font-size: 17px; }
+.night-wide .tm { align-content: start; }
+.tm-live { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.tl { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 4px 10px; align-items: center; }
+.tl-t { grid-row: span 2; align-self: start; min-width: 2.2em; padding-top: 5px; font: 700 14px/1 var(--font); color: var(--muted); }
+.tl-n { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; font-size: 15px; }
+.tl-n .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-n .letter { height: 16px; }
+.tl-n .rank { color: var(--muted); font-size: 13px; }
+.tl-p { min-width: 2ch; text-align: right; font: 700 17px/1 var(--font); font-variant-numeric: tabular-nums; }
+.tl-s { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; font: 700 14px/1 var(--font); background: var(--surface-2); font-variant-numeric: tabular-nums; }
+.tl-s.lead { background: var(--fg); color: var(--bg); }
 .mini { display: grid; gap: 2px; }
 .mini i { height: 5px; border-radius: 2px; background: var(--surface-2); }
 .mini i.h { background: var(--home); }
@@ -516,11 +558,25 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
 .gline input.won.h { border-color: var(--home); color: var(--home-ink); background: var(--home-soft); }
 .gline input.won.a { border-color: var(--away); color: var(--away-ink); background: var(--away-soft); }
 .gline input.bad { border-color: var(--warn); }
+/* A field always has its full score selected: a quiet mark that works on the team colours too. */
+.gline input::selection { background: color-mix(in srgb, var(--fg) 20%, transparent); color: inherit; }
 .gline .dash { text-align: center; color: var(--muted); font-weight: 700; }
 .gline.off { opacity: 0.4; }
-.quick { display: flex; gap: 8px; flex-wrap: wrap; }
-.quick button { border: 1px solid var(--line); background: transparent; border-radius: 99px; padding: 0 14px; min-height: 44px; font-size: 15px; font-weight: 600; color: var(--muted); cursor: pointer; }
+/* With edit rights a row ends with the button that clears the set. */
+.can-clear .gline { grid-template-columns: 64px 1fr 14px 1fr 36px; }
+.gline .clr { display: grid; place-items: center; width: 36px; height: 44px; padding: 0; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; }
+.gline .clr:hover { color: var(--fg); background: var(--surface-2); }
+.quick { display: flex; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+/* Three buttons in one row: each takes its share of the width by the length of its text. */
+.quick button {
+  flex: 1 1 auto; min-width: 0; height: 44px; border: 1px solid var(--line); background: transparent; border-radius: 12px; padding: 0 8px;
+  font: 600 15px/1 var(--font); color: var(--fg); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.quick button:hover:not(:disabled) { border-color: var(--faint); background: var(--surface-2); }
+.quick button:disabled { opacity: 0.4; cursor: default; }
+@media (max-width: 420px) { .quick button { font-size: 14px; padding: 0 6px; } }
 .code { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--muted); padding: 10px 12px; background: var(--surface-2); border-radius: 10px; flex-wrap: wrap; }
+.outcome .error { margin-bottom: 8px; }
 .code code { font: 700 15px/1 ui-monospace, 'SF Mono', Menlo, monospace; color: var(--fg); }
 .readonly-note { display: flex; gap: 10px; align-items: center; padding: 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--win) 40%, transparent); font-size: 15px; }
 .readonly-note svg { width: 20px; height: 20px; color: var(--win); flex: none; }
@@ -590,6 +646,11 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
   .order.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 720px) {
+  /* The day is the heading of the overview: in the centre, with the filters at the right edge. */
+  .night-wide .night-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; }
+  .night-wide .daynav { grid-column: 2; width: 340px; }
+  .night-wide .daynav .day { font-size: 20px; letter-spacing: -0.02em; }
+  .night-wide .filters { grid-column: 3; justify-self: end; flex-wrap: nowrap; }
   .tally-split { grid-template-columns: 1fr 1fr; }
   .lineup-cols { grid-template-columns: 1fr 1fr; }
   /* Top padding 14px: the close button then sits 10px from the top and 10px from the right. */
@@ -610,7 +671,6 @@ pre.mono { white-space: pre-wrap; word-break: break-all; }
     padding-bottom: 24px; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
     mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
   }
-  .view-night-only { display: none !important; }
   .match-grid, .match-main, .match-aside { display: grid; gap: 16px; min-width: 0; }
   .match-aside { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
   .match-aside > :first-child { grid-row: span 2; }

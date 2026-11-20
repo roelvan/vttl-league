@@ -70,7 +70,6 @@
       boxes = JSON.parse(remote);
     });
   });
-  let focus = $state(Math.min(initial.filter((s) => !isEmptySet(s)).length, boxCount - 1));
 
   const result = $derived(gameResult(boxes, sys, sheet.home.forfeit, sheet.away.forfeit));
   const perSet = $derived(boxes.map((s, i) => (isEmptySet(s) ? 'empty' : setWinner(i, s, sys))));
@@ -116,26 +115,50 @@
     left = left.filter((x) => x !== i);
     tried = false;
     pushSoon();
+    // No automatic jump after two characters: people type from the paper without a look at the
+    // screen, so each score needs the same key (Tab, an arrow, the space bar) to go on.
   }
 
-  function quick(q: 'home11' | 'away11' | 'clear' | 'homeWO' | 'awayWO') {
-    const b = boxes[focus];
-    // A quick button takes the focus out of the row: the row is still being filled in.
-    left = left.filter((x) => x !== focus);
+  // The same keys as in the set boxes of a table card: a field always has its full score
+  // selected, and the arrows, the space bar and the hyphen go from field to field.
+  let lines = $state<HTMLElement>();
+  function go(n: number) {
+    const f = lines?.querySelectorAll('input');
+    // A set after the one that decides the game is closed: the cursor stays where it is.
+    if (f && n >= 0 && n < f.length && !f[n].disabled) f[n].focus();
+  }
+  function onfieldkey(i: number, col: number, e: KeyboardEvent) {
+    const inp = e.currentTarget as HTMLInputElement;
+    const n = i * 2 + col;
+    const to =
+      e.key === ' ' || e.key === '-' || e.key === '/' || e.key === 'ArrowRight' ? n + 1
+      : e.key === 'ArrowLeft' || (e.key === 'Backspace' && !inp.value) ? n - 1
+      : e.key === 'ArrowDown' ? n + 2
+      : e.key === 'ArrowUp' ? n - 2
+      : null;
+    if (to === null) return;
+    e.preventDefault();
+    go(to);
+  }
+
+  function clearSet(i: number) {
+    boxes[i].l = '';
+    boxes[i].r = '';
+    left = left.filter((x) => x !== i);
     tried = false;
-    if (q === 'clear') {
-      b.l = '';
-      b.r = '';
-    } else if (q === 'home11') {
-      b.l = String(sys.pointCount);
-      document.getElementById(`g${focus}a`)?.focus();
-    } else if (q === 'away11') {
-      b.r = String(sys.pointCount);
-      document.getElementById(`g${focus}h`)?.focus();
+    pushSoon();
+    go(i * 2);
+  }
+
+  function quick(q: 'clearAll' | 'homeWO' | 'awayWO') {
+    tried = false;
+    if (q === 'clearAll') {
+      boxes = boxes.map(() => ({ l: '', r: '' }));
+      left = [];
+      document.getElementById(`g0${flip ? 'a' : 'h'}`)?.focus();
     } else {
       // WO: only in set 1, the other sets stay empty.
       boxes = boxes.map((_, i) => (i === 0 ? (q === 'homeWO' ? { l: 'WO', r: '' } : { l: '', r: 'WO' }) : { l: '', r: '' }));
-      focus = 0;
     }
     pushSoon();
   }
@@ -182,13 +205,21 @@
     aria-label="Set {i + 1} {names(side)}"
     value={side === 'home' ? b.l : b.r}
     readonly={readonly}
+    disabled={!readonly && i > decidedAt}
     class="{tone(cls, flip)}"
     class:won={w === side || w === `${side}FF`}
     class:bad={bad[i]}
     aria-invalid={bad[i] || undefined}
     aria-describedby={showError ? 'score-error' : undefined}
     oninput={(e) => oninput(i, side === 'home' ? 'l' : 'r', e)}
-    onfocus={() => (focus = i)}
+    onfocus={(e) => e.currentTarget.select()}
+    onmousedown={(e) => {
+      // A click never puts the cursor inside the score: it selects the full score.
+      e.preventDefault();
+      e.currentTarget.focus();
+      e.currentTarget.select();
+    }}
+    onkeydown={(e) => onfieldkey(i, (side === 'home') !== flip ? 0 : 1, e)}
   />
 {/snippet}
 
@@ -209,7 +240,7 @@
   {/if}
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="glines" onkeydown={onkey}>
+  <div class="glines" class:can-clear={!readonly} onkeydown={onkey} bind:this={lines}>
     {#each boxes as b, i (i)}
       {@const w = perSet[i]}
       <div class="gline" class:off={i > decidedAt} onfocusout={(e) => leaveRow(i, e)}>
@@ -217,26 +248,37 @@
         {@render box(i, b, w, flip ? 'away' : 'home')}
         <span class="dash">–</span>
         {@render box(i, b, w, flip ? 'home' : 'away')}
+        {#if !readonly}
+          <!-- Not a tab stop: Tab goes from score to score. With the keyboard, type over the score. -->
+          <button class="clr" type="button" tabindex="-1" aria-label="Set {i + 1} wissen" title="Set {i + 1} wissen" onclick={() => clearSet(i)}>
+            <Icon name="close" size={16} />
+          </button>
+        {/if}
       </div>
     {/each}
   </div>
 
   {#if !readonly}
-    <div class="quick" role="group" aria-label="Snel invullen">
-      <button type="button" onclick={() => quick('home11')}>{sys.pointCount} –</button>
-      <button type="button" onclick={() => quick('away11')}>– {sys.pointCount}</button>
-      <button type="button" onclick={() => quick('clear')}>Set wissen</button>
-      <button type="button" onclick={() => quick('homeWO')}>Thuisspeler WO</button>
-      <button type="button" onclick={() => quick('awayWO')}>Uitspeler WO</button>
+    <!-- The WO buttons are in the sequence of the players on screen. A set is cleared with the
+         button at the end of its row. -->
+    <div class="quick" role="group" aria-label="WO en wissen">
+      {#each order as side (side)}
+        <button type="button" aria-label="{side === 'home' ? 'Thuisspeler' : 'Uitspeler'} WO: {names(side)}" onclick={() => quick(`${side}WO`)}>{side === 'home' ? 'Thuisspeler' : 'Uitspeler'} WO</button>
+      {/each}
+      <button type="button" onclick={() => quick('clearAll')} disabled={boxes.every(isEmptySet)}>Alles wissen</button>
     </div>
   {/if}
 
-  <div role="alert">
-    {#if showError}
-      <p class="error" id="score-error">Deze score klopt niet. Een set gaat tot {sys.pointCount}, met 2 punten verschil.</p>
-    {/if}
+  <!-- One block: the alert region stays in the page for screen readers, but when it is empty
+       it must not take a row (and a second gap) of the dialog grid. -->
+  <div class="outcome">
+    <div role="alert">
+      {#if showError}
+        <p class="error" id="score-error">Deze score klopt niet. Een set gaat tot {sys.pointCount}, met 2 punten verschil.</p>
+      {/if}
+    </div>
+    <div class="code"><span>VTTL-notatie</span><code>{code || '–'}</code></div>
   </div>
-  <div class="code"><span>VTTL-notatie</span><code>{code || '–'}</code></div>
 
   {#snippet footer()}
     {#if onstats}
