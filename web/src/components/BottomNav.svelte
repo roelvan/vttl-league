@@ -9,11 +9,25 @@
     matchId,
     day,
     lineup = true,
-  }: { section: 'match' | 'lineup'; matchId: string; day: string; /** The line-up page: only for members of the home club. */ lineup?: boolean } = $props();
+    divisionHref = '',
+  }: {
+    section: 'match' | 'lineup';
+    matchId: string;
+    day: string;
+    /** The line-up page: only for members of the home club. */
+    lineup?: boolean;
+    /** The match opened from this division page: the way back goes there, not to the club night. */
+    divisionHref?: string;
+  } = $props();
+  const via = $derived(!!divisionHref);
 </script>
 
 <nav class="bottomnav" class:two={!lineup} aria-label="Wedstrijd">
-  <a href={urls.day(day)} onclick={link}><Icon name="left" size={22} />Clubavond</a>
-  <a href={urls.match(matchId)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}><Icon name="match" size={22} />Wedstrijd</a>
-  {#if lineup}<a href={urls.lineup(matchId)} onclick={link} aria-current={section === 'lineup' ? 'page' : undefined}><Icon name="lineup" size={22} />Opstelling</a>{/if}
+  {#if divisionHref}
+    <a href={divisionHref} onclick={link}><Icon name="left" size={22} />Afdeling</a>
+  {:else}
+    <a href={urls.day(day)} onclick={link}><Icon name="left" size={22} />Clubavond</a>
+  {/if}
+  <a href={urls.match(matchId, via)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}><Icon name="match" size={22} />Wedstrijd</a>
+  {#if lineup}<a href={urls.lineup(matchId, via)} onclick={link} aria-current={section === 'lineup' ? 'page' : undefined}><Icon name="lineup" size={22} />Opstelling</a>{/if}
 </nav>

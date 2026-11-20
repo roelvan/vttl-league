@@ -25,7 +25,7 @@
     current?: boolean;
     /** The overview: also shows the games in progress. */
     wide?: boolean;
-    /** The division page: all cards are of one division, so the card shows its day. */
+    /** A list of one division: the card shows its day, and the match opens with that list in the sidebar. */
     inDivision?: boolean;
     /** Opens the player widget next to `at`. */
     oninfo?: (at: HTMLElement, who: Who) => void;
@@ -86,7 +86,7 @@
      buttons of the line-ups are inside, and a link cannot hold a button. -->
 <div class="tm" class:current>
   <!-- A match of two other clubs opens on the pages of the home club: that club has the live data. -->
-  <a class="tm-open" href={card.neutral ? urls.matchAt(r.homeClub, r.matchId) : urls.match(r.matchId)} onclick={link} aria-current={current ? 'page' : undefined} aria-label={label}></a>
+  <a class="tm-open" href={card.neutral ? urls.matchAt(r.homeClub, r.matchId, inDivision) : urls.match(r.matchId, inDivision)} onclick={link} aria-current={current ? 'page' : undefined} aria-label={label}></a>
   <div class="tm-top">
     {#if inDivision}
       <span>{r.date ? shortDate(r.date) : r.matchId}</span>

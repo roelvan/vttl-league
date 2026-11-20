@@ -22,15 +22,19 @@ const prefix = () => {
 export const safeReturn = (to: string | null | undefined) => (to && to.startsWith('/') && !to.startsWith('//') && !to.startsWith('/login') ? to : '/');
 export const loginUrl = (back: string) => `/login?terug=${encodeURIComponent(back)}`;
 
+/** On a match URL: the match opened from the division page, so the sidebar shows the division. */
+export const VIA_DIVISION = { key: 'lijst', value: 'afdeling' };
+const via = (on: boolean) => (on ? `?${VIA_DIVISION.key}=${VIA_DIVISION.value}` : '');
+
 export const urls = {
   home: () => prefix() || '/',
   day: (day: string) => `${prefix()}/dag/${day}`,
-  match: (matchId: string) => `${prefix()}/wedstrijd/${matchSlug(matchId)}`,
-  lineup: (matchId: string) => `${prefix()}/wedstrijd/${matchSlug(matchId)}/opstelling`,
+  match: (matchId: string, viaDivision = false) => `${prefix()}/wedstrijd/${matchSlug(matchId)}${via(viaDivision)}`,
+  lineup: (matchId: string, viaDivision = false) => `${prefix()}/wedstrijd/${matchSlug(matchId)}/opstelling${via(viaDivision)}`,
   /** All matches of a division in a week; without a week, the week in progress. */
   division: (id: number, week?: string | null) => `${prefix()}/afdeling/${id}${week ? `/week/${encodeURIComponent(week)}` : ''}`,
   /** A match on the pages of another club (the home club has the live data). */
-  matchAt: (club: string, matchId: string) => clubPath(club, `/wedstrijd/${matchSlug(matchId)}`),
+  matchAt: (club: string, matchId: string, viaDivision = false) => clubPath(club, `/wedstrijd/${matchSlug(matchId)}`) + via(viaDivision),
   settings: () => '/instellingen',
 };
 

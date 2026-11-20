@@ -15,6 +15,13 @@ describe('urls', () => {
     expect(matchIdFromSlug('PWVL03-045')).toBe('PWVL03/045');
   });
 
+  it('marks a match that opens from the division page', () => {
+    club = 'WVL154';
+    expect(urls.match('PWVL03/045', true)).toBe('/c/WVL154/wedstrijd/PWVL03-045?lijst=afdeling');
+    expect(urls.lineup('PWVL03/045', true)).toBe('/c/WVL154/wedstrijd/PWVL03-045/opstelling?lijst=afdeling');
+    expect(urls.matchAt('WVL101', 'PWVL03/045', true)).toBe('/c/WVL101/wedstrijd/PWVL03-045?lijst=afdeling');
+  });
+
   it('has no club prefix while no club is known', () => {
     club = null;
     expect(urls.home()).toBe('/');

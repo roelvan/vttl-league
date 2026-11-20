@@ -509,6 +509,12 @@ button.rank:hover { color: var(--fg); border-color: var(--faint); }
 }
 /* The division page: the name of the division, the week, the standings and the cards. */
 .div-title { font: 700 20px/1.2 var(--font); letter-spacing: -0.02em; text-align: center; min-width: 0; }
+/* The heading of the division in the sidebar of a match. */
+.side-head { display: grid; gap: 2px; padding: 4px 2px; }
+.side-head .div-title { text-align: left; }
+.side-head .div-title a { color: inherit; text-decoration: none; }
+.side-head .div-title a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.side-head p { margin: 0; color: var(--muted); font-size: 14px; font-weight: 600; }
 /* The place of a team in its division: the tag of a player ranking (.rank-tag), in gold, silver
    and bronze for the first three places. */
 .rank-tag.place { background: var(--surface-2); color: var(--muted); font-variant-numeric: tabular-nums; }

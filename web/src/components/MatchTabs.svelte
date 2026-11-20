@@ -3,11 +3,11 @@
   import { urls } from '../lib/nav';
 
   /** The two views of one match. Shown on wide screens; on phones the bottom bar has the same links. */
-  let { section, matchId }: { section: 'match' | 'lineup'; matchId: string } = $props();
+  let { section, matchId, viaDivision = false }: { section: 'match' | 'lineup'; matchId: string; /** Keeps the division in the sidebar. */ viaDivision?: boolean } = $props();
 </script>
 
 <!-- One view only (a visitor): no tabs. -->
 <nav class="match-tabs hide-mobile" aria-label="Wedstrijd">
-  <a href={urls.match(matchId)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
-  <a href={urls.lineup(matchId)} onclick={link} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
+  <a href={urls.match(matchId, viaDivision)} onclick={link} aria-current={section === 'match' ? 'page' : undefined}>Wedstrijd</a>
+  <a href={urls.lineup(matchId, viaDivision)} onclick={link} aria-current={section === 'lineup' ? 'page' : undefined}>Opstelling</a>
 </nav>

@@ -17,7 +17,7 @@
   import PrintSheet from '../components/print/PrintSheet.svelte';
   import RefereeSlips from '../components/print/RefereeSlips.svelte';
   import { route, match, navigate } from '../lib/router.svelte';
-  import { matchIdFromSlug, clubPath, urls, type MenuAction } from '../lib/nav';
+  import { matchIdFromSlug, clubPath, urls, VIA_DIVISION, type MenuAction } from '../lib/nav';
   import { data, loadCategories, loadClubs, loadMatches, loadPublicMatches } from '../lib/data.svelte';
   import { viewer, publicClub } from '../lib/viewer.svelte';
   import { ws, connect, scheduleFlush, ensureMatch, preloadDay, setCurrent, onServerEvent } from '../lib/workspace.svelte';
@@ -93,6 +93,10 @@
   const sheet = $derived(m.id ? ws.entries[m.id]?.view : undefined);
   const day = $derived(m.day ?? row?.date ?? sheet?.day ?? (ws.current ? ws.entries[ws.current]?.view.day : null) ?? playDayIso());
 
+  /** The match opened from the division page: the sidebar shows that division, not the club night. */
+  const viaDivision = $derived(inMatch && route.query.get(VIA_DIVISION.key) === VIA_DIVISION.value);
+  const sideDivision = $derived(viaDivision && row?.divisionId ? { id: row.divisionId, week: row.week || null } : null);
+
   $effect(() => {
     const id = m.id;
     if (!id) return;
@@ -124,7 +128,7 @@
   // The line-up page is a form: only members of the home club get it. All others see the
   // line-up on the match page.
   $effect(() => {
-    if (m.section === 'lineup' && m.id && sheet && !session.loading && !homeMatch) navigate(urls.match(m.id), true);
+    if (m.section === 'lineup' && m.id && sheet && !session.loading && !homeMatch) navigate(urls.match(m.id, viaDivision), true);
   });
   /** The page heading for screen readers; the visible headings start at h2. */
   const pageTitle = $derived(
@@ -189,9 +193,16 @@
   matchActions={ourMatch}
 />
 
-<!-- The sidebar only goes with an open match: the club night itself uses the full width. -->
+<!-- The sidebar only goes with an open match: the club night itself uses the full width.
+     It is the list that the match opened from: the division, or else the club night. -->
 <div class="shell" class:single={!inMatch}>
-  {#if inMatch}
+  {#if sideDivision}
+    <aside class="side-night" aria-label="Afdeling">
+      <DivisionPage side id={sideDivision.id} week={sideDivision.week} currentId={m.id} />
+    </aside>
+  {:else if viaDivision && !list}
+    <aside class="side-night" aria-label="Afdeling"><div class="card empty"><Loading label="Wedstrijden laden" /></div></aside>
+  {:else if inMatch}
     <aside class="side-night" aria-label="Clubavond">
       <ClubNight {day} {rows} loaded={!!list} currentId={m.id} filters={false} />
     </aside>
@@ -206,11 +217,11 @@
     {:else if m.section === 'division'}
       <div class="view night-wide"><DivisionPage id={m.division} week={m.week} teams={list?.teams ?? []} /></div>
     {:else if m.section === 'match' && m.id}
-      {#if homeMatch}<MatchTabs section="match" matchId={m.id} />{/if}
+      {#if homeMatch}<MatchTabs section="match" matchId={m.id} {viaDivision} />{/if}
       {#key m.id}<MatchPage matchId={m.id} {row} {onaction} canPrint={homeMatch} />{/key}
     {:else if m.section === 'lineup' && m.id}
       {#if homeMatch}
-        <MatchTabs section="lineup" matchId={m.id} />
+        <MatchTabs section="lineup" matchId={m.id} {viaDivision} />
         {#key m.id}<LineUpPage matchId={m.id} {row} />{/key}
       {:else}
         <div class="card empty"><Loading label="Wedstrijd laden" /></div>
@@ -222,7 +233,7 @@
   </main>
 </div>
 
-{#if (m.section === 'match' || m.section === 'lineup') && m.id}<BottomNav section={m.section} matchId={m.id} {day} lineup={homeMatch} />{/if}
+{#if (m.section === 'match' || m.section === 'lineup') && m.id}<BottomNav section={m.section} matchId={m.id} {day} lineup={homeMatch} divisionHref={sideDivision ? urls.division(sideDivision.id, sideDivision.week) : ''} />{/if}
 <Toast />
 
 {#if dialog?.kind === 'print' && m.id}

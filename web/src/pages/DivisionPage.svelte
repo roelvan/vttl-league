@@ -8,6 +8,7 @@
 <script lang="ts">
   // All matches of a division in one week, with the standings. The data is of VTTL; a match
   // of the club on screen also shows the live record of that club, as in the club night.
+  // With `side` it is the sidebar of a match that opened from this page: the cards only.
   import NightCardView from '../components/NightCardView.svelte';
   import PlayerPopover from '../components/match/PlayerPopover.svelte';
   import TeamPopover from '../components/TeamPopover.svelte';
@@ -17,7 +18,7 @@
   import { api } from '../lib/api';
   import { data, clubName } from '../lib/data.svelte';
   import { ws, loadDay } from '../lib/workspace.svelte';
-  import { nightCard, placeClass } from '../lib/night';
+  import { nightCard, placeClass, shortDivision } from '../lib/night';
   import { navigate, link } from '../lib/router.svelte';
   import { urls, clubPath } from '../lib/nav';
   import { shortDate } from '../lib/format';
@@ -29,7 +30,22 @@
   import type { Sheet } from '../lib/sheet/types';
   import type { MatchRow, Team, TeamMatch } from '../lib/types';
 
-  let { id, week, teams = [] }: { id: number; week: string | null; /** The teams of the club on screen. */ teams?: Team[] } = $props();
+  let {
+    id,
+    week,
+    teams = [],
+    side = false,
+    currentId = null,
+  }: {
+    id: number;
+    week: string | null;
+    /** The teams of the club on screen. */
+    teams?: Team[];
+    /** The sidebar of an open match: a heading with a link to the page, and small cards. */
+    side?: boolean;
+    /** The match on screen, in the sidebar. */
+    currentId?: string | null;
+  } = $props();
 
   /** VTTL has new data after a minute at the earliest (the cache of the server). */
   const REFRESH_MS = 60_000;
@@ -96,7 +112,8 @@
     return [...view.rows]
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time) || a.matchId.localeCompare(b.matchId))
       .map((r) => {
-        const fromVttlData = build(r, details.get(r.matchId), view!.season);
+        // The small cards of the sidebar have no line-ups.
+        const fromVttlData = side ? undefined : build(r, details.get(r.matchId), view!.season);
         if (r.neutral) return nightCard(r, undefined, fromVttlData);
         // A match of the club: the stored record is the live truth. A draft is a copy of VTTL data.
         const e = ws.entries[r.matchId];
@@ -120,6 +137,12 @@
   const canInfo = (neutral: boolean) => !neutral || !isPublic();
 </script>
 
+{#if side}
+  <div class="side-head">
+    <h2 class="div-title"><a href={urls.division(id, view?.week ?? week)} onclick={link} title="Naar de afdeling, met de rangschikking">{view ? shortDivision(view.division.name) : 'Afdeling'}</a></h2>
+    <p>Alle wedstrijden{now ? ` · week ${now.week} · ${span(now)}` : ''}</p>
+  </div>
+{:else}
 <div class="night-head">
   <ViewPicker {title} {teams} current={id} week={view?.week ?? week} {clubHref} />
   {#if now}
@@ -135,6 +158,7 @@
     </div>
   {/if}
 </div>
+{/if}
 
 <PlayerPopover bind:this={info} />
 <TeamPopover bind:this={teamInfo} />
@@ -143,7 +167,7 @@
 <div class="div-body">
 <div class="night-list" style="--n: {Math.max(cards.length, 1)}">
   {#each cards as c (c.row.matchId)}
-    <NightCardView card={c} wide inDivision oninfo={canInfo(c.neutral) ? (el, who) => info?.show(el, who) : undefined}
+    <NightCardView card={c} wide={!side} current={c.row.matchId === currentId} inDivision oninfo={canInfo(c.neutral) ? (el, who) => info?.show(el, who) : undefined}
       ranking={view?.ranking} onteam={(el, t) => teamInfo?.show(el, t, c.row, view?.ranking.length ?? 0)} />
   {:else}
     <div class="card empty">
@@ -158,7 +182,7 @@
   {/each}
 </div>
 
-{#if view?.ranking.length}
+{#if !side && view?.ranking.length}
   <section class="card standings" aria-label="Rangschikking">
     <table>
       <thead>
