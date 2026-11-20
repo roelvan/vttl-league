@@ -213,6 +213,19 @@ pub enum Decision {
 /// Board player that serves first in a linked match: player 2 = the away player.
 const AWAY_SERVES: u8 = 2;
 
+/// Best-of of game `game` of a match: the league decides it, not the board. It is the number
+/// of set boxes of the match system (3 sets to win = best of 5); a match without a known
+/// system falls back to the boxes that are on the sheet, then to best of 5.
+pub fn best_of(doc: &Value, game: i64) -> u8 {
+    let boxes = doc["matchSystemId"]
+        .as_i64()
+        .and_then(crate::rules::system)
+        .map(|s| s.boxes)
+        .or_else(|| doc["results"][game as usize].as_array().map(|a| a.len()))
+        .unwrap_or(5);
+    if boxes % 2 == 1 && boxes <= 7 { boxes as u8 } else { 5 }
+}
+
 /// How long the broker keeps the retained names of a board (MQTT 5 Message Expiry Interval).
 /// After this time a board that connects gets no names of a match that ended long ago.
 const CONFIG_EXPIRY_SECS: u32 = 2 * 60 * 60;
@@ -315,10 +328,12 @@ impl Boards {
     }
 
     /// Starts a new match on the board (like vttl-api `publishDeviceCommand`). Not retained:
-    /// a board that reconnects later must not reset its score.
-    async fn start_match(&self, device: &str, starting_server: u8) -> anyhow::Result<()> {
+    /// a board that reconnects later must not reset its score. `sport` makes a board that was
+    /// left in another sport (badminton) play table tennis, and `bestOf` sets the format of the
+    /// match system on the board; older firmware ignores both fields and keeps its own format.
+    async fn start_match(&self, device: &str, starting_server: u8, best_of: u8) -> anyhow::Result<()> {
         let c = self.client.as_ref().ok_or_else(|| anyhow::anyhow!("MQTT is not configured"))?;
-        let payload = json!({ "command": "new", "payload": { "startingServer": starting_server } });
+        let payload = json!({ "command": "new", "payload": { "startingServer": starting_server, "sport": scoreboard::SPORT_TABLE_TENNIS, "bestOf": best_of } });
         c.publish(format!("tabletennis/{device}/command"), QoS::AtLeastOnce, false, payload.to_string()).await?;
         Ok(())
     }
@@ -372,6 +387,15 @@ fn on_publish(app: &Arc<App>, topic: &str, payload: &[u8]) -> anyhow::Result<()>
     };
     let link = link.expect("decide shows only linked boards");
     let s = scoreboard::decode(payload)?;
+    // The board must play the format of the match: a board with older firmware, or one whose
+    // operator changed Best Of in its menu, would otherwise finish too early or too late and
+    // the wrong result would go into the match (and be uploaded).
+    if let Some(sheet) = app.db.sheet(&link.club, &link.sheet)? {
+        let want = best_of(&sheet.doc, link.game);
+        if s.best_of != want {
+            anyhow::bail!("board plays best of {}, the match is best of {want}", s.best_of);
+        }
+    }
     if fix {
         app.db.set_board_match(device, topic_match)?;
     }
@@ -497,7 +521,7 @@ pub async fn link(State(app): State<Arc<App>>, u: User, Json(b): Json<LinkBody>)
     }
     app.boards.send_names(&b.device, &b.player1, &b.player2).await.map_err(|e| ApiError::BadRequest(format!("Scorebord: {e}")))?;
     // The away player (player 2) always serves first.
-    app.boards.start_match(&b.device, AWAY_SERVES).await.map_err(|e| ApiError::BadRequest(format!("Scorebord: {e}")))?;
+    app.boards.start_match(&b.device, AWAY_SERVES, best_of(&sheet.doc, b.game)).await.map_err(|e| ApiError::BadRequest(format!("Scorebord: {e}")))?;
     app.db.link_board(&Link {
         device: b.device.clone(),
         club: club.to_string(),
@@ -532,6 +556,24 @@ mod tests {
 
     fn link(m: Option<&str>) -> Link {
         Link { device: "b1".into(), club: "W1".into(), sheet: "S/1".into(), game: 3, account: "jan".into(), board_match: m.map(String::from) }
+    }
+
+    #[test]
+    fn best_of_comes_from_the_match_system() {
+        // system 2: 3 sets to win = best of 5; system -2: 4 sets = best of 7; system 1: 2 sets = best of 3
+        assert_eq!(best_of(&json!({ "matchSystemId": 2 }), 0), 5);
+        assert_eq!(best_of(&json!({ "matchSystemId": -2 }), 0), 7);
+        assert_eq!(best_of(&json!({ "matchSystemId": 1 }), 0), 3);
+        // the system wins over the boxes on the sheet
+        assert_eq!(best_of(&json!({ "matchSystemId": 2, "results": [[null, null, null]] }), 0), 5);
+        // unknown system: the boxes of that game, else best of 5
+        assert_eq!(best_of(&json!({ "matchSystemId": 999, "results": [null, [null, null, null]] }), 1), 3);
+        assert_eq!(best_of(&json!({ "results": [[null]] }), 0), 1);
+        assert_eq!(best_of(&json!({ "results": [null] }), 0), 5);
+        assert_eq!(best_of(&json!({}), 0), 5);
+        // a format no board can play falls back to best of 5
+        assert_eq!(best_of(&json!({ "results": [[null, null]] }), 0), 5);
+        assert_eq!(best_of(&json!({ "results": [[null, null, null, null, null, null, null, null, null]] }), 0), 5);
     }
 
     #[test]

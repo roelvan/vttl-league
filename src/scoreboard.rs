@@ -37,13 +37,25 @@ pub struct MatchState {
     pub timeout: Option<Timeout>,
 }
 
+/// Sport number of the scoreboard firmware (`SportId`): bits 1..3 of the meta byte, and the
+/// `sport` field of the `new` command. This server only knows table tennis.
+pub const SPORT_TABLE_TENNIS: u8 = 0;
+
 pub fn decode(p: &[u8]) -> Result<MatchState> {
     if p.len() < 7 {
         bail!("payload too short ({} bytes)", p.len());
     }
+    // A board that plays another sport (badminton = 1) sends points that the table tennis
+    // rules below would split into wrong games. Firmware before the sport bits always sends 0.
+    let sport = (p[5] >> 1) & 7;
+    if sport != SPORT_TABLE_TENNIS {
+        bail!("board plays sport {sport}, not table tennis");
+    }
     let duration_ms = u32::from_be_bytes([p[0], p[1], p[2], p[3]]);
     let best_of = p[4];
-    if best_of != 5 && best_of != 7 {
+    // Any best-of the board can play (1, 3, 5, 7). Whether it is the format of the linked
+    // match is checked by the caller, which knows the match system.
+    if best_of == 0 || best_of % 2 == 0 {
         bail!("unknown match type {best_of}");
     }
     let meta = p[5];
@@ -140,6 +152,42 @@ mod tests {
         let mut v = vec![0, 0, 0xea, 0x60, 5, meta, points.len() as u8];
         v.extend(bits(points));
         v
+    }
+
+    #[test]
+    fn every_odd_best_of() {
+        fn with_best_of(best_of: u8, points: &[u8]) -> Vec<u8> {
+            let mut v = payload(0, points);
+            v[4] = best_of;
+            v
+        }
+        // best of 1: one game decides the match
+        let s = decode(&with_best_of(1, &[0; 11])).unwrap();
+        assert_eq!((s.best_of, s.games.clone(), s.finished), (1, vec![(11, 0)], true));
+        // best of 3: two games
+        let s = decode(&with_best_of(3, &[0; 11])).unwrap();
+        assert!(!s.finished);
+        let s = decode(&with_best_of(3, &[0; 22])).unwrap();
+        assert_eq!((s.games_won, s.finished), ((2, 0), true));
+        // best of 5 is not finished after two games, best of 7 not after three
+        assert!(!decode(&with_best_of(5, &[0; 22])).unwrap().finished);
+        assert!(!decode(&with_best_of(7, &[0; 33])).unwrap().finished);
+        assert!(decode(&with_best_of(7, &[0; 44])).unwrap().finished);
+        // no deciding game exists for an even count
+        for bad in [0, 2, 4, 6] {
+            assert!(decode(&with_best_of(bad, &[0])).is_err(), "best of {bad}");
+        }
+    }
+
+    #[test]
+    fn other_sport_is_rejected() {
+        // meta 0x02 = badminton, player 1 serves first; also with the timeout bit and best of 5
+        for meta in [0x02, 0x03, 0x82] {
+            let e = decode(&payload(meta, &[0, 1, 0])).unwrap_err();
+            assert!(e.to_string().contains("sport 1"), "{e}");
+        }
+        // the sport bits of table tennis are 0: nothing changes for it
+        assert!(decode(&payload(0x01, &[0, 1, 0])).is_ok());
     }
 
     #[test]
