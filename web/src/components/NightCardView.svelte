@@ -5,6 +5,7 @@
   import { boards, boardFor, deviceAlias } from '../lib/boards.svelte';
   import type { GameSide } from '../lib/live';
   import TimeoutBadge from './match/TimeoutBadge.svelte';
+  import NightLineup from './NightLineup.svelte';
   import { ownIsAway, tone } from '../lib/viewer.svelte';
 
   let {
@@ -49,10 +50,16 @@
       return { no: t.no, pos: g.pos, sides: [side(g.home, 'h', 0), side(g.away, 'a', 1)] };
     }),
   );
+  const label = $derived(
+    `${teams[0].name} tegen ${teams[1].name}${hasScore ? `, ${teams[0].score}–${teams[1].score}` : ''}${card.state === 'live' ? ', bezig' : ''}`,
+  );
   const who = (o: number) => (o === 1 ? 'thuis' : o === 2 ? 'bezoekers' : 'scheidsrechter');
 </script>
 
-<a class="tm" class:current href={urls.match(r.matchId)} onclick={link} aria-current={current ? 'page' : undefined}>
+<!-- The card opens the match. It is a block with a link over it, not a link: the player
+     buttons of the line-ups are inside, and a link cannot hold a button. -->
+<div class="tm" class:current>
+  <a class="tm-open" href={urls.match(r.matchId)} onclick={link} aria-current={current ? 'page' : undefined} aria-label={label}></a>
   <div class="tm-top">
     <span>{card.division || r.matchId}</span><span>·</span><span>{card.isHome ? 'Thuis' : 'Uit'}</span>
     <span class="spacer"></span>
@@ -97,7 +104,10 @@
       {#each card.segments as s, i (i)}<i class={tone(s, flip)}></i>{/each}
     </div>
   {/if}
+  {#if wide && card.lineup}
+    <NightLineup lineup={card.lineup} names={{ home: r.homeTeam, away: r.awayTeam }} {flip} />
+  {/if}
   <div class="tm-top">
     <span>{card.total ? `${card.played} / ${card.total} gespeeld` : r.matchId}</span><span class="spacer"></span><span>{card.tables}</span>
   </div>
-</a>
+</div>

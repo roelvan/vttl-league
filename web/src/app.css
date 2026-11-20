@@ -313,6 +313,9 @@ button.gbox:hover { background: color-mix(in srgb, var(--fg) 8%, var(--surface-2
 .sk.row { height: 26px; }
 .mt.dim { opacity: 0.35; }
 .mt.dim:hover { opacity: 0.7; }
+/* A game of the player under the pointer in the Spelers card: won (green) or lost (red). */
+.mt.mark-w { border-color: var(--win); background: color-mix(in srgb, var(--win) 12%, var(--surface-2)); }
+.mt.mark-l { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--surface-2)); }
 /* Live: only the border and the pill are magenta; the rest looks like a finished game. */
 .mt.is-live { border-color: var(--live); }
 .mt.is-later, .mt.is-next { background: transparent; }
@@ -438,9 +441,48 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
 .daynav .day input { position: absolute; inset: 0; opacity: 0; cursor: pointer; min-height: 0; }
 .daynav .btn { min-height: 44px; width: 44px; padding: 0; }
 .night-list { display: grid; gap: 10px; }
-.tm { display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); text-decoration: none; color: inherit; }
+.tm { position: relative; container-type: inline-size; display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); text-decoration: none; color: inherit; }
 .tm:hover { border-color: var(--faint); }
 .tm.current { border-color: var(--sel); }
+/* The link of the card: over the full card, under the player buttons of the line-ups. */
+.tm-open { position: absolute; inset: 0; border-radius: inherit; }
+/* Line-ups in the card: one column per team, one button per player. */
+.nl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.nl-col { display: grid; gap: 2px; align-content: start; min-width: 0; }
+.nl-h { display: flex; justify-content: space-between; gap: 8px; padding: 0 5px 4px; white-space: nowrap; font: 600 12px/1.2 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.nl-h .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nl-row {
+  position: relative; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; min-height: 38px; padding: 4px 5px;
+  border: 0; border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: background-color 0.12s, opacity 0.12s;
+}
+.nl-row .n { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nl-row .rank-tag.pair { color: var(--muted); background: var(--surface-2); }
+.nl-row .wl, .nl-row .res { flex: none; font: 700 15px/1 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nl-row .wl .sep { color: var(--muted); font-weight: 600; padding: 0 1px; }
+.nl-row .wl.clean { color: var(--win); }
+/* One fixed width for the W–V number and for the result on hover: the name does not move. */
+.nl-row .wl, .nl-row .res { display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-width: 40px; }
+.nl-row .wl { gap: 0; }
+.nl-row .upset { display: grid; color: var(--win); margin-right: 3px; }
+.nl-row .res { font-size: 14px; }
+/* A narrow card (a phone): one team below the other, so the names have room. The width is that of the card content. */
+@container (max-width: 339px) {
+  .nl { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+}
+.nl-row.on, .nl-row[aria-pressed='true'] { background: var(--surface-2); }
+.nl-row[aria-pressed='true'] { box-shadow: inset 0 0 0 1.5px var(--faint); }
+.nl-row.off { opacity: 0.4; }
+/* The player in focus won (green) or lost (red) against this row. The set score says the same. */
+.nl-row.is-w { background: color-mix(in srgb, var(--win) 16%, transparent); }
+.nl-row.is-w .res { color: var(--win); }
+.nl-row.is-l { background: color-mix(in srgb, var(--danger) 16%, transparent); }
+.nl-row.is-l .res { color: var(--danger); }
+.nl-row.is-live { box-shadow: inset 0 0 0 1.5px var(--live); }
+.nl-row.is-live .res { color: var(--live); font-size: 13px; }
+.nl-row.is-todo .n { color: var(--muted); }
+.nl-row.is-todo .res { color: var(--muted); font-weight: 600; font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .nl-row { transition: none; } }
 :root[data-theme='light'] .tm.current { box-shadow: inset 0 0 0 1px var(--sel); } /* inset: the sidebar clips outer rings */
 /* Light: #f2b900 is too pale for text, so away pills are solid gold with dark text (8:1). */
 :root[data-theme='light'] .away .team-tag,
@@ -458,7 +500,7 @@ button.rank-tag::before { content: ''; position: absolute; inset: -3px -4px; }
 .night-wide { grid-template-columns: minmax(0, 1fr); }
 /* --n = the number of cards: a short evening stays a centred group under the day, a full one fills the width. */
 .night-wide .night-list {
-  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
   width: 100%; max-width: calc(var(--n, 1) * 440px); justify-self: center;
 }
 /* No matches: a plain message under the day, not one lone card in the first column. */

@@ -14,6 +14,7 @@
     oninfo,
     only = null,
     focus = null,
+    marks = null,
     onclearfocus,
     flip = false,
   }: {
@@ -30,6 +31,8 @@
     only?: Set<number> | null;
     /** Games of the player under the pointer in the Spelers card: the others are dimmed. */
     focus?: Set<number> | null;
+    /** Per game index: the player under the pointer won ('w') or lost ('l') it. */
+    marks?: Record<number, 'w' | 'l'> | null;
     onclearfocus?: () => void;
     /** The own club plays away: see MatchTile. */
     flip?: boolean;
@@ -74,7 +77,7 @@
       {/each}
     {:else}
     {#each shown as g (g.index)}
-      <MatchTile dim={!!focus && !focus.has(g.index)} game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} live={live[g.index] ?? null} used={timeoutsUsed[g.index] ?? null} {onopen} {oninfo} {flip} />
+      <MatchTile dim={!!focus && !focus.has(g.index)} mark={marks?.[g.index] ?? null} game={g} boxes={view.sys.boxes} tableNo={tableNo(g)} live={live[g.index] ?? null} used={timeoutsUsed[g.index] ?? null} {onopen} {oninfo} {flip} />
     {:else}
       <p class="muted">Alle wedstrijden zijn gespeeld.</p>
     {/each}

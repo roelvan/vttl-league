@@ -16,8 +16,11 @@
     onopen,
     oninfo,
     dim = false,
+    mark = null,
     flip = false,
   }: {
+    /** The player under the pointer in the Spelers card won ('w') or lost ('l') this game. */
+    mark?: 'w' | 'l' | null;
     /** Not a game of the players picked in the Spelers card. */
     dim?: boolean;
     /** The own club plays away: the away row comes first, in the home colour. */
@@ -131,6 +134,8 @@
   class="mt is-{game.state === 'final' ? 'final' : game.state}"
   class:static={!onopen}
   class:dim
+  class:mark-w={mark === 'w'}
+  class:mark-l={mark === 'l'}
   role={onopen ? undefined : 'group'}
   style="--boxes: {boxes}"
   aria-label={onopen ? undefined : label}

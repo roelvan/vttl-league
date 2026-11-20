@@ -2,7 +2,7 @@
 
 import type { MatchRow } from './types';
 import type { Sheet } from './sheet/types';
-import { liveView, type TableView } from './live';
+import { liveView, lineup, type LineRow, type TableView } from './live';
 import { byTeam } from './format';
 import { SYSTEMS } from './sheet/systems';
 
@@ -37,6 +37,8 @@ export interface NightCard {
   live: TableView[];
   /** Sets of a game in this match system. */
   boxes: number;
+  /** The players of the two teams with their games; null when no player is known. */
+  lineup: { home: LineRow[]; away: LineRow[] } | null;
 }
 
 function parseScore(s: string): [number, number] | null {
@@ -44,10 +46,26 @@ function parseScore(s: string): [number, number] | null {
   return m ? [Number(m[1]), Number(m[2])] : null;
 }
 
-export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
+/** The line-ups of a match record, when it has a player. */
+function lineupOf(sheet: Sheet | undefined): NightCard['lineup'] {
+  if (!sheet) return null;
+  try {
+    const v = liveView(sheet);
+    const l = { home: lineup(sheet, v, 'home'), away: lineup(sheet, v, 'away') };
+    return [...l.home, ...l.away].some((r) => !r.double && r.person.full) ? l : null;
+  } catch {
+    return null; // unknown match system
+  }
+}
+
+/**
+ * `sheet` is the stored record: the live truth of a home match. `known` is any record of the
+ * match on this device (also a copy of the VTTL data): it gives the line-ups.
+ */
+export function nightCard(row: MatchRow, sheet: Sheet | undefined, known: Sheet | undefined = sheet): NightCard {
   const division = shortDivision(row.divisionName ?? '');
   if (row.isBye) {
-    return { row, division, isHome: row.isHome, homeScore: null, awayScore: null, segments: [], played: 0, total: 0, state: 'bye', tables: '', outcome: null, live: [], boxes: 0 };
+    return { row, division, isHome: row.isHome, homeScore: null, awayScore: null, segments: [], played: 0, total: 0, state: 'bye', tables: '', outcome: null, live: [], boxes: 0, lineup: null };
   }
   let homeScore: number | null = null;
   let awayScore: number | null = null;
@@ -94,7 +112,7 @@ export function nightCard(row: MatchRow, sheet: Sheet | undefined): NightCard {
   const ours = row.isHome ? homeScore : awayScore;
   const theirs = row.isHome ? awayScore : homeScore;
   const outcome = state === 'final' && ours !== null && theirs !== null ? (ours > theirs ? 'won' : ours < theirs ? 'lost' : 'draw') : null;
-  return { row, division, isHome: row.isHome, homeScore, awayScore, segments, played, total, state, tables, outcome, live, boxes };
+  return { row, division, isHome: row.isHome, homeScore, awayScore, segments, played, total, state, tables, outcome, live, boxes, lineup: lineupOf(known) };
 }
 
 /** The matches of a day, best team first. */

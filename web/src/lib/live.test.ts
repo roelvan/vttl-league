@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { custom } from './sheet/create';
-import { liveView, person, tally, notation, letter } from './live';
+import { liveView, person, tally, lineup, rankValue, notation, letter } from './live';
 import { nightCard } from './night';
 import { getSystem } from './sheet/systems';
 import type { Sheet } from './sheet/types';
@@ -121,6 +121,34 @@ describe('tally', () => {
     expect(home[3]).toMatchObject({ wins: 1, losses: 0 });
     expect(home[0]).toMatchObject({ wins: 0, losses: 1 });
     expect(home[0].pips).toHaveLength(4);
+  });
+});
+
+describe('lineup', () => {
+  it('orders the rankings', () => {
+    expect(rankValue('B2')!).toBeLessThan(rankValue('B4')!);
+    expect(rankValue('B6')!).toBeLessThan(rankValue('C0')!);
+    expect(rankValue('NG')).toBeNull();
+    expect(rankValue('')).toBeNull();
+  });
+
+  it('gives each row its games against the rows of the other team', () => {
+    const s = men();
+    s.results[0] = pad(win(true)); // D (D0) beats X (C4): an upset
+    s.results[3] = pad(win(false)); // A (C2) loses to Y (C4)
+    const v = liveView(s);
+    const home = lineup(s, v, 'home');
+    const away = lineup(s, v, 'away');
+    const x = away.find((r) => r.label === 'X')!;
+    const y = away.find((r) => r.label === 'Y')!;
+    expect(home[3].vs[x.key]).toMatchObject({ result: 'w', own: 3, other: 0, upset: true });
+    expect(home[3].upsets).toBe(1);
+    expect(home[0].vs[y.key]).toMatchObject({ result: 'l', own: 0, other: 3, upset: false });
+    // The same game from the other side.
+    expect(y.vs[home[0].key]).toMatchObject({ result: 'w', own: 3, other: 0, upset: true });
+    expect(x.vs[home[3].key]).toMatchObject({ result: 'l', upset: false });
+    // Each player meets each player of the other team.
+    expect(Object.keys(home[1].vs)).toHaveLength(4);
   });
 });
 

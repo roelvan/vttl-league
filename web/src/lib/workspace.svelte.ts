@@ -16,7 +16,7 @@ import { api, ApiError, OfflineError, type StoredSheet, type UploadOutcome } fro
 import { applyOps, setAt, type Op } from './sheet/ops';
 import type { Sheet } from './sheet/types';
 import { getSystem } from './sheet/systems';
-import { computeScore, isByeClub } from './sheet/score';
+import { computeScore, isByeClub, isEmptySet } from './sheet/score';
 import { session } from './session.svelte';
 import { publicClub } from './viewer.svelte';
 import { importOps, keyLabel } from './sheet/vttl';
@@ -219,16 +219,31 @@ export async function ensureMatch(row: MatchRow, season: number) {
 
 const hasResult = (row: MatchRow) => /[1-9]/.test(row.score) || !!row.games;
 
+/** VTTL has a result, but the record on this device has no players or no set scores yet. */
+const lacksResult = (s: Sheet) =>
+  ![...s.home.players, ...s.away.players].some((p) => p?.name) || !s.results.some((g) => g?.some((x) => !isEmptySet(x)));
+
 /**
- * Brings the played matches of a day onto this device in the background, one by one, so a
- * click on a match shows it complete at once. Matches that are already here are left alone:
- * the server sends their changes. A match without a result has nothing to load.
+ * Brings the played matches of a day onto this device in the background, three at a time, so
+ * the club night shows the players and a click on a match shows it complete at once. A match
+ * that is here with its players and results is left alone: the server sends its changes. A
+ * record without them (an old draft, or a stored record that was never filled) gets the VTTL
+ * data. A match without a result has nothing to load.
  */
 export async function preloadDay(rows: MatchRow[], season: number) {
-  for (const row of rows) {
-    if (row.isBye || !hasResult(row) || ws.entries[row.matchId]) continue;
-    await ensureMatch(row, season).catch(() => {});
-  }
+  const todo = rows.filter((row) => {
+    if (row.isBye || !hasResult(row)) return false;
+    const e = ws.entries[row.matchId];
+    return !e || lacksResult(e.view);
+  });
+  const next = async (): Promise<void> => {
+    const row = todo.shift();
+    if (!row) return;
+    const e = ws.entries[row.matchId];
+    await (e && !e.draft ? importFromVttl(row.matchId) : ensureMatch(row, season)).catch(() => {});
+    return next();
+  };
+  await Promise.all([next(), next(), next()]);
 }
 
 async function bringIn(row: MatchRow, season: number) {

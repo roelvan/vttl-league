@@ -2,7 +2,7 @@
   // Line icons from the design (24x24, stroke = currentColor).
   type Name =
     | 'match' | 'night' | 'lineup' | 'sun' | 'moon' | 'more' | 'plus' | 'close' | 'chevron' | 'left' | 'right'
-    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats' | 'edit' | 'trash' | 'rows' | 'columns' | 'trophy';
+    | 'print' | 'upload' | 'check' | 'settings' | 'user' | 'logout' | 'info' | 'board' | 'send' | 'warn' | 'share' | 'refresh' | 'lock' | 'captain' | 'timer' | 'stats' | 'edit' | 'trash' | 'rows' | 'columns' | 'trophy' | 'up';
   let { name, size = 20 }: { name: Name; size?: number } = $props();
 </script>
 
@@ -31,6 +31,8 @@
     <path d="M7 9V3h10v6" /><rect x="3" y="9" width="18" height="8" rx="2" /><path d="M7 14h10v7H7z" />
   {:else if name === 'upload'}
     <path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+  {:else if name === 'up'}
+    <path d="M12 19V5M6 11l6-6 6 6" stroke-width="2.6" />
   {:else if name === 'check'}
     <path d="M4 12.5 9 17.5 20 6.5" />
   {:else if name === 'settings'}

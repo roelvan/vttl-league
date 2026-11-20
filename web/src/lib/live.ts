@@ -311,3 +311,62 @@ export function notation(sets: { h: number; a: number }[]): string {
     .map((s) => (s.h > s.a ? String(s.a) : `-${s.h}`))
     .join('/');
 }
+
+// ---------------------------------------------------------------- line-up with duels
+
+/** The result of one row against one row of the other team. */
+export interface Duel {
+  game: number;
+  result: Pip;
+  /** Sets of this row and of the other row. */
+  own: number;
+  other: number;
+  /** A win of a single player against a better ranking. */
+  upset: boolean;
+}
+
+export interface LineRow extends TallyRow {
+  double: boolean;
+  /** Per key of a row of the other team: the game against it. */
+  vs: Record<string, Duel>;
+  /** Wins against a better ranking. */
+  upsets: number;
+}
+
+const RANK_LETTERS = 'ABCDEF';
+/** Strength of a VTTL ranking: lower is better ("B2" before "B4" before "C0"). Null = no ranking (NG, empty). */
+export function rankValue(ranking: string): number | null {
+  const m = /^([A-F])\s*(\d+)$/i.exec(ranking.trim());
+  return m ? RANK_LETTERS.indexOf(m[1].toUpperCase()) * 100 + Number(m[2]) : null;
+}
+
+/** The tally rows of a side, each with its games against the rows of the other team. */
+export function lineup(sheet: Sheet, view: LiveView, side: Side): LineRow[] {
+  const { sys } = view;
+  const other: Side = side === 'home' ? 'away' : 'home';
+  const mine = side === 'home' ? 'h' : 'a';
+  return tally(sheet, view, side).map((r) => {
+    const si = Number(r.key.split(':')[1]);
+    const double = sys.slots[si]?.kind === 'double';
+    const rank = rankValue(r.person.ranking);
+    const vs: Record<string, Duel> = {};
+    for (const gi of r.games) {
+      const g = view.games[gi];
+      // A game in the list that is not of this slot is a double of this player.
+      const own = gameSlots(sheet, sys, gi, side).includes(si);
+      const result: Pip = g.winner ? (g.winner === mine ? 'w' : 'l') : g.state === 'live' ? 'live' : '';
+      for (const sj of gameSlots(sheet, sys, gi, other)) {
+        const theirs = slotPeople(sheet, sys, other, sj);
+        const against = !double && own && theirs.length === 1 ? rankValue(theirs[0].ranking) : null;
+        vs[`${other}:${sj}`] = {
+          game: gi,
+          result,
+          own: g[side].sets,
+          other: g[other].sets,
+          upset: result === 'w' && rank !== null && against !== null && rank > against,
+        };
+      }
+    }
+    return { ...r, double, vs, upsets: Object.values(vs).filter((d) => d.upset).length };
+  });
+}

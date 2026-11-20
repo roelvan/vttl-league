@@ -34,7 +34,7 @@
     const e = ws.entries[id];
     return e && !e.draft ? e.view : undefined;
   };
-  const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, stored(r.matchId))));
+  const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, stored(r.matchId), wide ? ws.entries[r.matchId]?.view : undefined)));
   const shown = $derived(
     cards.filter((c) => (filter === 'all' ? true : c.state === filter)),
   );

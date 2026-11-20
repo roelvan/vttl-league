@@ -81,6 +81,14 @@
   }
   const only = $derived(gamesOf(picked));
   const focus = $derived(hovered ? gamesOf([hovered]) : null);
+  /** The decided games of the row under the pointer: won or lost by its side. */
+  const marks = $derived.by(() => {
+    if (!hovered || !focus || !view) return null;
+    const mine = hovered.startsWith('home') ? 'h' : 'a';
+    const m: Record<number, 'w' | 'l'> = {};
+    for (const g of view.games) if (focus.has(g.index) && g.winner) m[g.index] = g.winner === mine ? 'w' : 'l';
+    return m;
+  });
   $effect(() => {
     void matchId;
     picked = [];
@@ -150,7 +158,7 @@
         </section>
       {/if}
 
-      <MatchOrder {view} {flip} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} oninfo={showInfo} />
+      <MatchOrder {view} {flip} loading={pending} live={liveGames} {timeoutsUsed} {only} {focus} {marks} onclearfocus={() => (picked = [])} onopen={(g) => (entry = g.index)} oninfo={showInfo} />
     </div>
 
     <div class="match-aside">

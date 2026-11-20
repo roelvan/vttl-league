@@ -173,7 +173,7 @@
   <main class="view">
     <h1 class="sr-only">{pageTitle} · VTTL Competitie</h1>
     {#if m.section === 'night'}
-      <div class="view night-wide"><ClubNight {day} {rows} loaded={!!list} currentId={ws.current} wide /></div>
+      <div class="view night-wide"><ClubNight {day} {rows} loaded={!!list} wide /></div>
     {:else if m.section === 'match' && m.id}
       <MatchTabs section="match" matchId={m.id} />
       {#key m.id}<MatchPage matchId={m.id} {row} {onaction} canPrint={homeMatch} />{/key}
