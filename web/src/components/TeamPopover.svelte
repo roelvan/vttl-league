@@ -4,6 +4,7 @@
   import { link } from '../lib/router.svelte';
   import { urls, clubPath } from '../lib/nav';
   import { shortDivision, placeClass } from '../lib/night';
+  import { swallowOutsideClick } from '../lib/dismiss';
   import type { RankingEntry } from '../lib/types';
 
   /** The division and the week of the team: a match row has them. */
@@ -71,7 +72,10 @@
     };
     window.addEventListener('scroll', away, { capture: true, passive: true });
     window.addEventListener('resize', away);
+    // A press outside only closes the widget: it does not click the element below.
+    const unwatch = el ? swallowOutsideClick(el) : undefined;
     return () => {
+      unwatch?.();
       window.removeEventListener('scroll', away, { capture: true });
       window.removeEventListener('resize', away);
     };

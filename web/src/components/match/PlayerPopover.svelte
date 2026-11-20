@@ -24,6 +24,7 @@
   // server (lib/players.svelte.ts), which keeps each player for a day.
   import { loadPlayer, players } from '../../lib/players.svelte';
   import { titleCase } from '../../lib/format';
+  import { swallowOutsideClick } from '../../lib/dismiss';
 
   let el: HTMLDivElement | undefined = $state();
   let who = $state<Who | null>(null);
@@ -83,7 +84,10 @@
     };
     window.addEventListener('scroll', away, { capture: true, passive: true });
     window.addEventListener('resize', away);
+    // A press outside only closes the widget: it does not click the element below.
+    const unwatch = el ? swallowOutsideClick(el) : undefined;
     return () => {
+      unwatch?.();
       window.removeEventListener('scroll', away, { capture: true });
       window.removeEventListener('resize', away);
     };
