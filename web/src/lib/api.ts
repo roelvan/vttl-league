@@ -166,8 +166,10 @@ export const api = {
     request<StoredSheet[]>('GET', `/api/public/sheets?club=${encodeURIComponent(club)}&day=${encodeURIComponent(day)}`),
   publicSheet: (club: string, id: string) => request<StoredSheet>('GET', `/api/public/sheet?club=${encodeURIComponent(club)}&id=${encodeURIComponent(id)}`),
   publicMatch: (club: string, id: string) => request<TeamMatch>('GET', `/api/public/match?club=${encodeURIComponent(club)}&id=${encodeURIComponent(id)}`),
-  /** Null when the server has no data of this player yet: spectators cannot make it ask VTTL. */
-  publicPlayer: (id: number) => request<PlayerInfo | null>('GET', `/api/public/player?id=${id}`),
+  /** Null when the player is not in a line-up of the club, or VTTL does not know the player. */
+  publicPlayer: (club: string, id: number) => request<PlayerInfo | null>('GET', `/api/public/player?club=${encodeURIComponent(club)}&id=${id}`),
+  /** As `warmPlayers`, for a spectator: the server only gets the players of a line-up of the club. */
+  publicWarmPlayers: (club: string, ids: number[]) => request<void>('POST', '/api/public/players/warm', { club, ids }),
   publicBoards: (club: string) => request<{ devices: Device[]; states: BoardState[] }>('GET', `/api/public/boards?club=${encodeURIComponent(club)}`),
   sheetOps: (id: string, clientId: string, seq: number, ops: Op[]) =>
     request<{ rev: number; seq: number }>('POST', '/api/sheet/ops', { id, clientId, seq, ops }),

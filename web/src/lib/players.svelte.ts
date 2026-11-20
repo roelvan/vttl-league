@@ -5,10 +5,10 @@
 
 import { api } from './api';
 import type { PlayerInfo } from './types';
-import { isPublic } from './viewer.svelte';
+import { isPublic, publicClub } from './viewer.svelte';
 
 export interface PlayerEntry {
-  /** Undefined: not loaded yet. Null: the server has no data (public pages). */
+  /** Undefined: not loaded yet. Null: the server has no data of this player. */
   info?: PlayerInfo | null;
   loading: boolean;
   error: string;
@@ -30,7 +30,8 @@ export async function loadPlayer(id: number) {
   e.loading = true;
   e.asked = Date.now();
   try {
-    e.info = isPublic() ? await api.publicPlayer(id) : await api.player(id);
+    const club = publicClub();
+    e.info = club ? await api.publicPlayer(club, id) : await api.player(id);
     e.error = '';
   } catch (err) {
     e.error = err instanceof Error ? err.message : 'Laden mislukt';
@@ -44,14 +45,17 @@ export async function loadPlayer(id: number) {
 const warmed = new Set<string>();
 
 /**
- * A member opened a match: the server gets its players from VTTL in the background, so the
+ * Someone opened a match: the server gets its players from VTTL in the background, so the
  * widget has data at the first click. Once per line-up and session; the server skips a player
- * that it got less than a day ago.
+ * that it got less than a day ago. For a spectator, the server only gets the players of a
+ * line-up of the club.
  */
 export function warmPlayers(ids: number[]) {
-  if (isPublic() || !ids.length) return;
-  const key = [...ids].sort((a, b) => a - b).join(',');
+  if (!ids.length) return;
+  const club = publicClub();
+  if (isPublic() && !club) return;
+  const key = `${club ?? ''}|${[...ids].sort((a, b) => a - b).join(',')}`;
   if (warmed.has(key)) return;
   warmed.add(key);
-  api.warmPlayers(ids).catch(() => warmed.delete(key));
+  (club ? api.publicWarmPlayers(club, ids) : api.warmPlayers(ids)).catch(() => warmed.delete(key));
 }

@@ -102,6 +102,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/public/sheet", get(public::sheet))
         .route("/api/public/match", get(public::team_match))
         .route("/api/public/player", get(public::player))
+        .route("/api/public/players/warm", post(public::warm_players))
         .route("/api/public/boards", get(public::boards))
         .route("/api/public/ws", get(public::ws))
         .with_state(app)
@@ -239,32 +240,60 @@ struct WarmBody {
 }
 
 /// The players of one match, with room for substitutes.
-const WARM_MAX: usize = 16;
+pub const WARM_MAX: usize = 16;
 /// Between two player calls to VTTL.
 const WARM_PAUSE: std::time::Duration = std::time::Duration::from_millis(500);
 /// One warm-up at a time for the whole server: VTTL gets the player calls in sequence.
 static WARMING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+/// One player for a spectator, with the guest session of VTTL. A player that the cache does
+/// not have waits for its turn after the warm-ups, and the pause comes after it too: all
+/// spectators together cannot make this server call VTTL faster than the warm-up does.
+pub async fn queued_player(app: &App, id: i64) -> anyhow::Result<Option<tabt::PlayerInfo>> {
+    if app.tabt.has_player(id) {
+        // Fresh, or old: then the cache gives it at once and starts one refresh.
+        return app.tabt.player(None, id).await;
+    }
+    let one = WARMING.lock().await;
+    // A warm-up, or another spectator, got it while this one waited.
+    if app.tabt.has_player(id) {
+        return app.tabt.player(None, id).await;
+    }
+    let r = app.tabt.player(None, id).await;
+    tokio::spawn(async move {
+        tokio::time::sleep(WARM_PAUSE).await;
+        drop(one);
+    });
+    r
+}
+
 /// A user opened a match: get its players in the background, so the player widget opens
 /// at once. A player with a fresh answer costs no call.
 async fn warm_players(State(app): State<Arc<App>>, u: User, Json(b): Json<WarmBody>) -> StatusCode {
-    let ids: Vec<i64> = b.ids.into_iter().filter(|id| *id > 0).take(WARM_MAX).filter(|id| !app.tabt.player_is_fresh(*id)).collect();
-    if !ids.is_empty() {
-        tokio::spawn(async move {
-            let _one = WARMING.lock().await;
-            for id in ids {
-                // Another warm-up got it while this one waited.
-                if app.tabt.player_is_fresh(id) {
-                    continue;
-                }
-                if let Err(e) = app.tabt.player(Some(&u.creds), id).await {
-                    tracing::warn!(id, "player warm-up: {e:#}");
-                }
-                tokio::time::sleep(WARM_PAUSE).await;
-            }
-        });
-    }
+    warm(app, Some(u.creds), b.ids.into_iter().filter(|id| *id > 0).take(WARM_MAX).collect());
     StatusCode::NO_CONTENT
+}
+
+/// Gets the players that have no fresh answer, in the background and in sequence.
+/// `creds`: none for a spectator (the guest session of VTTL).
+pub fn warm(app: Arc<App>, creds: Option<tabt::Creds>, ids: Vec<i64>) {
+    let ids: Vec<i64> = ids.into_iter().take(WARM_MAX).filter(|id| !app.tabt.player_is_fresh(*id)).collect();
+    if ids.is_empty() {
+        return;
+    }
+    tokio::spawn(async move {
+        let _one = WARMING.lock().await;
+        for id in ids {
+            // Another warm-up got it while this one waited.
+            if app.tabt.player_is_fresh(id) {
+                continue;
+            }
+            if let Err(e) = app.tabt.player(creds.as_ref(), id).await {
+                tracing::warn!(id, "player warm-up: {e:#}");
+            }
+            tokio::time::sleep(WARM_PAUSE).await;
+        }
+    });
 }
 
 // ---------------------------------------------------------------- data

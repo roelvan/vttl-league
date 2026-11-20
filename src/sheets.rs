@@ -129,6 +129,21 @@ impl Db {
             .optional()?)
     }
 
+    /// Is this VTTL member number in a line-up of a sheet of the club?
+    pub fn sheet_has_player(&self, club: &str, unique_index: i64) -> anyhow::Result<bool> {
+        let c = self.conn();
+        Ok(c.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sheet s, json_each(s.doc, '$.home.players') p
+                 WHERE s.club = ?1 AND json_valid(s.doc) AND trim(json_extract(p.value, '$.computerNumber')) = ?2
+                UNION ALL
+                SELECT 1 FROM sheet s, json_each(s.doc, '$.away.players') p
+                 WHERE s.club = ?1 AND json_valid(s.doc) AND trim(json_extract(p.value, '$.computerNumber')) = ?2)",
+            params![club, unique_index.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
     /// Creates the sheet unless it exists. Returns the stored sheet and whether it is new.
     pub fn create_sheet(&self, club: &str, s: &Sheet, by: &str) -> anyhow::Result<(Sheet, bool)> {
         let c = self.conn();
@@ -320,6 +335,20 @@ mod tests {
         assert_eq!(d["results"][0][1]["l"], "11");
         assert!(apply(&mut d, &op(json!([]), json!(1))).is_err());
         assert!(apply(&mut d, &op(json!(["a", 5000]), json!(1))).is_err());
+    }
+
+    #[test]
+    fn finds_a_player_of_a_line_up() {
+        let db = db::memory();
+        let doc = json!({ "home": { "players": [null, { "name": "A", "computerNumber": " 505290 " }] }, "away": { "players": [{ "computerNumber": "123" }, { "name": "B" }] } });
+        let s = Sheet { id: "PWVLH08/012".into(), rev: 1, day: "2026-11-14".into(), season: 27, doc };
+        db.create_sheet("WVL154", &s, "jan").unwrap();
+        let empty = Sheet { id: "PWVLH08/013".into(), rev: 1, day: "2026-11-14".into(), season: 27, doc: json!({ "comments": "" }) };
+        db.create_sheet("WVL154", &empty, "jan").unwrap();
+        assert!(db.sheet_has_player("WVL154", 505290).unwrap());
+        assert!(db.sheet_has_player("WVL154", 123).unwrap());
+        assert!(!db.sheet_has_player("WVL154", 124).unwrap());
+        assert!(!db.sheet_has_player("WVL999", 123).unwrap());
     }
 
     #[test]

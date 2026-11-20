@@ -110,14 +110,66 @@ pub async fn team_match(State(app): State<Arc<App>>, Query(q): Query<IdQuery>) -
         .ok_or_else(|| ApiError::NotFound(format!("Wedstrijd {} niet gevonden", q.id)))
 }
 
-/// A player for the player widget, or null. Spectators only get a player that the cache
-/// has: a visitor without a login cannot make this server ask VTTL for any member number.
-/// A cached player that is too old does start one refresh (VTTL gives it without a login).
-pub async fn player(State(app): State<Arc<App>>, Query(q): Query<crate::api::PlayerQuery>) -> Result<Json<Option<crate::tabt::PlayerInfo>>, ApiError> {
-    if q.id <= 0 || !app.tabt.has_player(q.id) {
+#[derive(Deserialize)]
+pub struct PlayerQuery {
+    club: String,
+    id: i64,
+}
+
+/// A player for the player widget, or null. A visitor without a login cannot make this
+/// server ask VTTL for any member number: only for a player in a line-up of the club, and
+/// then with the guest session of VTTL, one call at a time (`queued_player`). The answer
+/// goes in the cache, so a player costs one call per day for all visitors together.
+pub async fn player(State(app): State<Arc<App>>, Query(q): Query<PlayerQuery>) -> Result<Json<Option<crate::tabt::PlayerInfo>>, ApiError> {
+    let club = club_id(&q.club)?;
+    if known_players(&app, club, vec![q.id]).await?.is_empty() {
         return Ok(Json(None));
     }
-    Ok(Json(app.tabt.player(None, q.id).await.map_err(|e| ApiError::Vttl(e.to_string()))?))
+    Ok(Json(crate::api::queued_player(&app, q.id).await.map_err(|e| ApiError::Vttl(e.to_string()))?))
+}
+
+#[derive(Deserialize)]
+pub struct WarmBody {
+    club: String,
+    ids: Vec<i64>,
+}
+
+/// A spectator opened a match: get its players in the background, as for a member, with the
+/// guest session of VTTL. Only the players that `player` gives too.
+pub async fn warm_players(State(app): State<Arc<App>>, Json(b): Json<WarmBody>) -> Result<axum::http::StatusCode, ApiError> {
+    let club = club_id(&b.club)?;
+    let ids = known_players(&app, club, b.ids.into_iter().take(crate::api::WARM_MAX).collect()).await?;
+    crate::api::warm(app, None, ids);
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// The players of `ids` that a spectator can ask for: those that the cache has, and those in
+/// a line-up of the club (in a match sheet, or in a match of the season as VTTL has it).
+/// From the database and the cache only: this never calls VTTL for the matches.
+async fn known_players(app: &App, club: &str, ids: Vec<i64>) -> Result<Vec<i64>, ApiError> {
+    let mut known = Vec::new();
+    let mut rest = Vec::new();
+    for id in ids.into_iter().filter(|id| *id > 0) {
+        if app.tabt.has_player(id) || app.db.sheet_has_player(club, id)? {
+            known.push(id);
+        } else {
+            rest.push(id);
+        }
+    }
+    if rest.is_empty() {
+        return Ok(known);
+    }
+    let season = app.tabt.current_season(None).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
+    if let Some((_, matches)) = app.tabt.club_matches_cached(season, club) {
+        let played: std::collections::HashSet<i64> = matches
+            .iter()
+            .filter_map(|m| m.details.as_ref())
+            .flat_map(|d| d.home_players.iter().chain(&d.away_players))
+            .map(|p| p.unique_index)
+            .collect();
+        known.extend(rest.into_iter().filter(|id| played.contains(id)));
+    }
+    Ok(known)
 }
 
 pub async fn boards(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>) -> Result<Json<Value>, ApiError> {
