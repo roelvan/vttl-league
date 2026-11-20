@@ -103,7 +103,7 @@ pub async fn division(State(app): State<Arc<App>>, Query(q): Query<DivisionQuery
     let season = app.tabt.current_season(None).await.map_err(vttl)?;
     let divisions = app.tabt.divisions(None, season).await.map_err(vttl)?;
     let division = divisions.iter().find(|d| d.id == q.id).ok_or_else(|| ApiError::NotFound(format!("Afdeling {} niet gevonden", q.id)))?;
-    let (calendar, ranking) = tokio::join!(app.tabt.division_calendar(None, season, q.id), app.tabt.division_ranking(None, q.id));
+    let (calendar, ranking) = tokio::join!(app.tabt.division_calendar(None, season, q.id), app.tabt.division_ranking(None, q.id, crate::tabt::TTL_SHORT));
     let weeks = weeks_of(&calendar.map_err(vttl)?);
     let today = crate::when::local_day(crate::tabt::now_ms() / 1000);
     let week = match q.week.as_deref().filter(|w| weeks.iter().any(|x| x.0 == *w)) {
@@ -121,6 +121,22 @@ pub async fn division(State(app): State<Arc<App>>, Query(q): Query<DivisionQuery
         "rows": division_rows(&matches, division, club),
         "matches": matches,
     })))
+}
+
+/// The standings of the divisions of the teams of a club, by division id: the place of a team
+/// in the club night cards. One VTTL call per division, so the answers stay for ten minutes.
+pub async fn rankings(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>) -> Result<Json<Value>, ApiError> {
+    let club = club_id(&q.club)?;
+    let vttl = |e: anyhow::Error| ApiError::Vttl(e.to_string());
+    let season = app.tabt.current_season(None).await.map_err(vttl)?;
+    let mut ids: Vec<i64> = app.tabt.teams(None, season, club).await.map_err(vttl)?.iter().map(|t| t.division_id).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let all = futures_util::future::join_all(ids.iter().map(|id| app.tabt.division_ranking(None, *id, crate::tabt::TTL_SEASON))).await;
+    // A division without standings (a cup, or a failed call) is left out.
+    let out: serde_json::Map<String, Value> =
+        ids.iter().zip(all).filter_map(|(id, r)| r.ok().filter(|r| !r.is_empty()).map(|r| (id.to_string(), json!(r)))).collect();
+    Ok(Json(Value::Object(out)))
 }
 
 /// The weeks of a calendar in the order of play: (name, first day, last day).

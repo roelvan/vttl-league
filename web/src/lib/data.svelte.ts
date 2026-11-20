@@ -2,7 +2,7 @@
 // working (and validating) when the hall WiFi drops.
 
 import { api } from './api';
-import type { Club, MatchList, MatchRow, Member, PlayerCategory } from './types';
+import type { Club, MatchList, MatchRow, Member, PlayerCategory, RankingEntry } from './types';
 import { menCategory } from './sheet/create';
 
 function load<T>(key: string): T | undefined {
@@ -25,6 +25,8 @@ export const data = $state({
   matches: load<MatchList>('vl.matches.current') ?? null,
   /** Match lists of other clubs (public pages), by club id. The last one is kept on the device. */
   publicMatches: {} as Record<string, PublicList>,
+  /** Standings by club id, then by division id: the place of a team in the club night cards. */
+  rankings: {} as Record<string, Record<string, RankingEntry[]>>,
   /** "club|category" -> strength list */
   members: load<Record<string, Member[]>>('vl.members') ?? {},
 });
@@ -80,6 +82,14 @@ export function loadPublicMatches(club: string) {
     data.publicMatches[club] = await api.publicClub(club);
     save('vl.public', { club, list: data.publicMatches[club] });
     return data.publicMatches[club];
+  });
+}
+
+/** The standings of the divisions of a club. A failure leaves the cards without a place. */
+export function loadRankings(club: string) {
+  return once(`rankings.${club}`, async () => {
+    data.rankings[club] = await api.publicRankings(club);
+    return data.rankings[club];
   });
 }
 

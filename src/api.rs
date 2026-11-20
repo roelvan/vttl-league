@@ -99,6 +99,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/public/clubs", get(public::clubs))
         .route("/api/public/club", get(public::club))
         .route("/api/public/division", get(public::division))
+        .route("/api/public/rankings", get(public::rankings))
         .route("/api/public/sheets", get(public::sheets))
         .route("/api/public/sheet", get(public::sheet))
         .route("/api/public/match", get(public::team_match))

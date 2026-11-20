@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { NightCard } from '../lib/night';
+  import { standingOf, type NightCard } from '../lib/night';
+  import type { RankingEntry } from '../lib/types';
   import { urls } from '../lib/nav';
   import { link } from '../lib/router.svelte';
   import { boards, boardFor, deviceAlias } from '../lib/boards.svelte';
@@ -16,7 +17,9 @@
     current = false,
     wide = false,
     inDivision = false,
+    ranking,
     oninfo,
+    onteam,
   }: {
     card: NightCard;
     current?: boolean;
@@ -26,6 +29,10 @@
     inDivision?: boolean;
     /** Opens the player widget next to `at`. */
     oninfo?: (at: HTMLElement, who: Who) => void;
+    /** The standings of the division of the match: each team in it gets an info button. */
+    ranking?: RankingEntry[];
+    /** Opens the team widget next to `at` (the info button). Without it, there is no button. */
+    onteam?: (at: HTMLElement, team: RankingEntry) => void;
   } = $props();
 
   const r = $derived(card.row);
@@ -37,8 +44,8 @@
     const done = card.state === 'final';
     const h = card.homeScore ?? 0;
     const a = card.awayScore ?? 0;
-    const home = { name: r.homeTeam, score: card.homeScore, ours: !card.neutral && card.isHome, won: done && h > a };
-    const away = { name: r.awayTeam, score: card.awayScore, ours: !card.neutral && !card.isHome, won: done && a > h };
+    const home = { name: r.homeTeam, score: card.homeScore, ours: !card.neutral && card.isHome, won: done && h > a, place: standingOf(ranking, r.homeClub, r.homeTeam) };
+    const away = { name: r.awayTeam, score: card.awayScore, ours: !card.neutral && !card.isHome, won: done && a > h, place: standingOf(ranking, r.awayClub, r.awayTeam) };
     return flip ? [away, home] : [home, away];
   });
   const outcomeText = { won: 'Gewonnen', lost: 'Verloren', draw: 'Gelijk' } as const;
@@ -102,7 +109,13 @@
   </div>
   <div class="tm-mid">
     {#each teams as t (t.name)}
-      <span class="tn {t.ours ? 'ours' : 'them'}"><span class="tn-t">{t.name}</span>{#if t.won}<span class="trophy"><Icon name="trophy" size={16} /></span>{/if}</span><span class="ts">{hasScore ? t.score : '–'}</span>
+      <span class="tn {t.ours ? 'ours' : 'them'}">
+        <span class="tn-t">{t.name}</span>
+        {#if t.won}<span class="trophy"><Icon name="trophy" size={16} /></span>{/if}
+        {#if t.place && onteam}
+          {@const p = t.place}
+          <button class="team-info" type="button" aria-haspopup="dialog" aria-label="Ploeginfo {t.name}" onclick={(e) => onteam(e.currentTarget, p)}><Icon name="info" size={16} /></button>
+        {/if}</span><span class="ts">{hasScore ? t.score : '–'}</span>
     {/each}
   </div>
   {#each timeouts as s (s.device)}

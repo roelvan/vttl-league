@@ -509,6 +509,28 @@ button.rank:hover { color: var(--fg); border-color: var(--faint); }
 }
 /* The division page: the name of the division, the week, the standings and the cards. */
 .div-title { font: 700 20px/1.2 var(--font); letter-spacing: -0.02em; text-align: center; min-width: 0; }
+/* The place of a team in its division: the tag of a player ranking (.rank-tag), in gold, silver
+   and bronze for the first three places. */
+.rank-tag.place { background: var(--surface-2); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rank-tag.place.p1 { background: rgba(242, 194, 48, 0.2); color: #f2c230; }
+.rank-tag.place.p2 { background: rgba(195, 203, 214, 0.2); color: #d3dae4; }
+.rank-tag.place.p3 { background: rgba(205, 130, 66, 0.24); color: #e39a5c; }
+:root[data-theme='light'] .rank-tag.place.p1 { background: #f2c230; color: #0d1730; }
+:root[data-theme='light'] .rank-tag.place.p2 { background: #c3cbd6; color: #0d1730; }
+:root[data-theme='light'] .rank-tag.place.p3 { background: #cd8242; color: #0d1730; }
+/* The info button of a team in a card: it opens the team widget. */
+.team-info { flex: none; position: relative; z-index: 1; display: grid; padding: 0; border: 0; background: none; color: var(--faint); cursor: pointer; }
+.team-info::before { content: ''; position: absolute; inset: -8px -6px; }
+.team-info:hover { color: var(--fg); }
+/* The standings table: a circle. */
+.rank-tag.place.round { display: inline-grid; min-width: 26px; width: 26px; padding: 0; border-radius: 50%; font-size: 12px; }
+/* Wider than the player widget: "313/170" must fit in a tile, else the widget gets a scrollbar. */
+.tp { width: min(340px, calc(100vw - 16px)); overflow-x: hidden; }
+.tp .pp-stats div { min-width: 0; }
+.tp .pp-stats dd { font-size: 17px; white-space: nowrap; }
+.tp .pp-stats abbr { text-decoration: none; }
+.tp-links { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-weight: 600; }
+.tp-links a { color: inherit; text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
 /* The heading is a list: the club night and the divisions of the club. */
 .view-pick { position: relative; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 44px; cursor: pointer; }
 .view-pick .vp-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

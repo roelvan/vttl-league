@@ -10,13 +10,14 @@
   // of the club on screen also shows the live record of that club, as in the club night.
   import NightCardView from '../components/NightCardView.svelte';
   import PlayerPopover from '../components/match/PlayerPopover.svelte';
+  import TeamPopover from '../components/TeamPopover.svelte';
   import Icon from '../components/Icon.svelte';
   import Loading from '../components/Loading.svelte';
   import ViewPicker from '../components/ViewPicker.svelte';
   import { api } from '../lib/api';
   import { data, clubName } from '../lib/data.svelte';
   import { ws, loadDay } from '../lib/workspace.svelte';
-  import { nightCard } from '../lib/night';
+  import { nightCard, placeClass } from '../lib/night';
   import { navigate, link } from '../lib/router.svelte';
   import { urls, clubPath } from '../lib/nav';
   import { shortDate } from '../lib/format';
@@ -114,6 +115,7 @@
   const clubHref = $derived(ownDays ? urls.day(ownDays.split(',')[0]) : urls.home());
 
   let info: ReturnType<typeof PlayerPopover> | undefined = $state();
+  let teamInfo: ReturnType<typeof TeamPopover> | undefined = $state();
   /** A visitor without a login only gets the players of the club on screen. */
   const canInfo = (neutral: boolean) => !neutral || !isPublic();
 </script>
@@ -135,12 +137,14 @@
 </div>
 
 <PlayerPopover bind:this={info} />
+<TeamPopover bind:this={teamInfo} />
 
 <!-- The cards and the standings: side by side on a wide screen, else the standings below. -->
 <div class="div-body">
 <div class="night-list" style="--n: {Math.max(cards.length, 1)}">
   {#each cards as c (c.row.matchId)}
-    <NightCardView card={c} wide inDivision oninfo={canInfo(c.neutral) ? (el, who) => info?.show(el, who) : undefined} />
+    <NightCardView card={c} wide inDivision oninfo={canInfo(c.neutral) ? (el, who) => info?.show(el, who) : undefined}
+      ranking={view?.ranking} onteam={(el, t) => teamInfo?.show(el, t, c.row, view?.ranking.length ?? 0)} />
   {:else}
     <div class="card empty">
       {#if error}
@@ -172,7 +176,7 @@
       <tbody>
         {#each view.ranking as e (`${e.position}|${e.team}`)}
           <tr class:ours={norm(e.teamClub) === norm(club)}>
-            <td class="n">{e.position}</td>
+            <td class="n"><span class="rank-tag place round {placeClass(e.position)}">{e.position}</span></td>
             <th scope="row"><a href={clubPath(e.teamClub)} onclick={link} title="Naar de clubavond van {e.team}">{e.team}</a></th>
             <td class="n">{e.played}</td>
             <td class="n">{e.won}</td>

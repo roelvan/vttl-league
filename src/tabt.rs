@@ -682,9 +682,10 @@ impl Tabt {
         Ok(r.children("TeamMatchesEntries").map(team_match).collect())
     }
 
-    /// The standings of a division. A division id is of one season, so there is no season here.
-    pub async fn division_ranking(&self, c: Option<&Creds>, division: i64) -> Result<Vec<RankingEntry>> {
-        let r = self.call(c, "GetDivisionRankingRequest", &[("DivisionId", division.to_string())], TTL_SHORT).await?;
+    /// The standings of a division, not older than `ttl`. A division id is of one season, so
+    /// there is no season here.
+    pub async fn division_ranking(&self, c: Option<&Creds>, division: i64, ttl: Duration) -> Result<Vec<RankingEntry>> {
+        let r = self.call(c, "GetDivisionRankingRequest", &[("DivisionId", division.to_string())], ttl).await?;
         Ok(r.children("RankingEntries")
             .map(|e| RankingEntry {
                 position: e.i("Position"),

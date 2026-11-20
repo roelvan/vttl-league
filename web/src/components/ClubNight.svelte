@@ -2,6 +2,9 @@
   import Loading from './Loading.svelte';
   import NightCardView from './NightCardView.svelte';
   import PlayerPopover from './match/PlayerPopover.svelte';
+  import TeamPopover from './TeamPopover.svelte';
+  import { data, loadRankings } from '../lib/data.svelte';
+  import { viewClub } from '../lib/viewer.svelte';
   import { warmPlayers } from '../lib/players.svelte';
   import Icon from './Icon.svelte';
   import ViewPicker from './ViewPicker.svelte';
@@ -42,6 +45,14 @@
     return e && !e.draft ? e.view : undefined;
   };
   const cards = $derived(matchesOn(rows, day).map((r) => nightCard(r, stored(r.matchId), wide ? ws.entries[r.matchId]?.view : undefined)));
+
+  /** The standings of the divisions of the club: the place of each team in its card. */
+  const club = $derived(viewClub());
+  $effect(() => {
+    if (club && loaded) loadRankings(club).catch(() => {});
+  });
+  const rankings = $derived((club && data.rankings[club]) || {});
+  let teamInfo: ReturnType<typeof TeamPopover> | undefined = $state();
 
   /** The player widget: one for all cards. */
   let info: ReturnType<typeof PlayerPopover> | undefined = $state();
@@ -91,10 +102,12 @@
 </div>
 
 <PlayerPopover bind:this={info} />
+<TeamPopover bind:this={teamInfo} />
 
 <div class="night-list" style="--n: {Math.max(shown.length, 1)}">
   {#each shown as c (c.row.matchId)}
-    <NightCardView card={c} current={c.row.matchId === currentId} {wide} oninfo={(at, who) => info?.show(at, who)} />
+    <NightCardView card={c} current={c.row.matchId === currentId} {wide} oninfo={(at, who) => info?.show(at, who)}
+      ranking={rankings[c.row.divisionId]} onteam={(at, t) => teamInfo?.show(at, t, c.row, rankings[c.row.divisionId]?.length ?? 0)} />
   {:else}
     <div class="card empty">
       {#if !loaded}

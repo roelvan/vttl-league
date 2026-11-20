@@ -4,7 +4,7 @@
 // While it does, every request gets a redirect or an HTML page instead of our JSON.
 // Those answers are reported as `offline` (kind "portal"), never as data.
 
-import type { Me, Member, PlayerInfo, ClubInfo, MatchList, TeamMatch, DivisionView, PlayerCategory, MatchSystem, Season, Club } from './types';
+import type { Me, Member, PlayerInfo, ClubInfo, MatchList, TeamMatch, DivisionView, RankingEntry, PlayerCategory, MatchSystem, Season, Club } from './types';
 import type { Sheet } from './sheet/types';
 import type { Op } from './sheet/ops';
 import type { Device, BoardState } from './boards.svelte';
@@ -162,6 +162,8 @@ export const api = {
   // Public, read-only (no login): anyone with the link follows live.
   publicClubs: () => request<ClubLine[]>('GET', '/api/public/clubs'),
   publicClub: (club: string) => request<MatchList & { club: Club | null }>('GET', `/api/public/club?club=${encodeURIComponent(club)}`),
+  /** The standings of the divisions of the teams of a club, by division id. */
+  publicRankings: (club: string) => request<Record<string, RankingEntry[]>>('GET', `/api/public/rankings?club=${encodeURIComponent(club)}`),
   /** A division seen from a club; without `week`, the week in progress. */
   publicDivision: (club: string, id: number, week?: string | null) =>
     request<DivisionView>('GET', `/api/public/division?club=${encodeURIComponent(club)}&id=${id}${week ? `&week=${encodeURIComponent(week)}` : ''}`),

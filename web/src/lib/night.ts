@@ -1,6 +1,6 @@
 // Club night: one card per team match of the club on a day.
 
-import type { MatchRow } from './types';
+import type { MatchRow, RankingEntry } from './types';
 import type { Sheet } from './sheet/types';
 import { liveView, lineup, type LineRow, type TableView } from './live';
 import { byTeam } from './format';
@@ -16,6 +16,19 @@ export function shortDivision(name: string) {
   const p = name.split(' - ').map((x) => x.trim()).filter(Boolean);
   return p.length > 2 ? `${p[0]} · ${p.at(-1)}` : p.join(' · ');
 }
+
+/** The line of a team in the standings of its division: the same club and the same team letter. */
+export function standingOf(ranking: RankingEntry[] | undefined, club: string, team: string): RankingEntry | undefined {
+  if (!ranking) return undefined;
+  const norm = (c: string) => c.replace('-', '').toUpperCase();
+  // "T.T.C. Zonnebeke A" in the standings is "Zonnebeke A" in a match.
+  const letter = (t: string) => t.trim().split(/\s+/).pop() ?? '';
+  const ofClub = ranking.filter((e) => norm(e.teamClub) === norm(club));
+  return ofClub.find((e) => letter(e.team) === letter(team)) ?? (ofClub.length === 1 ? ofClub[0] : undefined);
+}
+
+/** The colour class of a place: gold, silver, bronze, or none. */
+export const placeClass = (position: number) => (position >= 1 && position <= 3 ? `p${position}` : '');
 
 export type NightState = 'live' | 'final' | 'soon' | 'bye';
 
