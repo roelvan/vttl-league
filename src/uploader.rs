@@ -4,7 +4,8 @@
 //! an upload of that match a moment later. The server builds the upload lines itself
 //! (src/rules.rs) from the stored match:
 //! - complete result: the full upload, once per change (also when every phone is closed);
-//! - otherwise: a partial upload when a game was decided since the last upload.
+//! - otherwise: a partial upload when the line-up changed or a game was decided since the last
+//!   upload. Before the first game, it publishes the line-ups (both must be complete).
 //!
 //! The VTTL login: the account that made the last change, then the other accounts of the club
 //! (those with a successful real upload first). VTTL fault 22 (no rights) tries the next one.
@@ -240,8 +241,14 @@ pub fn plan(s: &Sheet, last_sent: Option<&str>, force: bool) -> Option<(String, 
     if !full && s.disable_partial_upload && !force {
         return None;
     }
-    // Nothing decided yet: a partial upload would only send "?".
-    if !full && score.home_wins + score.away_wins == 0 && !force {
+    // Nothing decided yet: the upload publishes the line-ups, with "?" for every game. A match
+    // against a free team has no line-up to publish.
+    let bye = rules::is_bye_club(&s.home.club_id) || rules::is_bye_club(&s.away.club_id);
+    if !full && bye && score.home_wins + score.away_wins == 0 && !force {
+        return None;
+    }
+    // A line-up with an empty place: VTTL refuses the line. A manual upload still shows why.
+    if !force && rules::lineup_missing(s, sys) {
         return None;
     }
     let data = rules::export_csv(s, sys, !full);
@@ -601,8 +608,18 @@ mod tests {
 
     #[test]
     fn when_to_upload() {
-        // Nothing decided: nothing to send.
-        assert!(plan(&sheet(json!([empty(), empty(), empty(), empty(), empty()])), None, false).is_none());
+        // Nothing decided: the line-ups go to VTTL, once.
+        let s = sheet(json!([empty(), empty(), empty(), empty(), empty()]));
+        let (data, partial) = plan(&s, None, false).unwrap();
+        assert!(partial && data.contains(";1,2,1-2;3,4,1-2;P?,?,?,?,?"), "{data}");
+        assert!(plan(&s, Some(&data), false).is_none());
+        // A change of the line-up: again.
+        let mut s2 = s.clone();
+        s2.home.players[1].as_mut().unwrap().computer_number = "7".into();
+        assert!(plan(&s2, Some(&data), false).is_some());
+        // A line-up that is not complete: nothing to send.
+        s2.away.players[0] = None;
+        assert!(plan(&s2, None, false).is_none());
         // One game decided: partial.
         let s = sheet(json!([won(), empty(), empty(), empty(), empty()]));
         let (data, partial) = plan(&s, None, false).unwrap();
@@ -614,6 +631,14 @@ mod tests {
         let s = sheet(json!([won(), won(), won(), won(), won()]));
         let (_, partial) = plan(&s, None, false).unwrap();
         assert!(!partial);
+        // A place in the line-up is empty: VTTL refuses it, so only a manual upload sends it.
+        let mut s = sheet(json!([won(), empty(), empty(), empty(), empty()]));
+        s.home.players[1] = None;
+        assert!(plan(&s, None, false).is_none());
+        assert!(plan(&s, None, true).is_some());
+        // A team that gives forfeit needs no players.
+        s.home.forfeit = true;
+        assert!(plan(&s, None, false).is_some());
     }
 
     #[test]

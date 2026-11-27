@@ -555,6 +555,15 @@ fn team_column(s: &Sheet, sys: &MatchSystem, side: Side) -> String {
     out.join(",")
 }
 
+/// A team that plays has a required player slot without a player. VTTL refuses such a line
+/// ("De thuisspeler [] met positie [1] is niet geldig").
+pub fn lineup_missing(s: &Sheet, sys: &MatchSystem) -> bool {
+    if is_bye_club(&s.home.club_id) || is_bye_club(&s.away.club_id) {
+        return false;
+    }
+    [Side::Home, Side::Away].into_iter().any(|side| !s.team(side).forfeit && team_column(s, sys, side).split(',').any(str::is_empty))
+}
+
 /// "18:30" / "18u30" / "18.30" -> "18:30".
 fn hhmm(s: &str) -> Option<String> {
     let t = s.trim();
