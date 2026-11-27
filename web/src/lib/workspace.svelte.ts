@@ -265,13 +265,45 @@ export function addStored(stored: StoredSheet, c: Ctx = ctx()) {
   persist();
 }
 
+/** The days that a page asked for, per scope: after a break in the connection they load again. */
+const shownDays = new Map<string, Set<string>>();
+const MAX_SHOWN_DAYS = 8;
+
 /** The stored records of the club for one day (club night). Offline: keep what we have. */
-export async function loadDay(day: string) {
-  const c = ctx();
+export async function loadDay(day: string, c: Ctx = ctx()) {
+  const days = shownDays.get(c.key) ?? new Set<string>();
+  shownDays.set(c.key, days);
+  // The newest at the end; the oldest goes out.
+  days.delete(day);
+  days.add(day);
+  if (days.size > MAX_SHOWN_DAYS) days.delete(days.values().next().value!);
   try {
     for (const s of await (c.pub ? api.publicSheets(c.pub, day) : api.sheetsOn(day))) addStored(s, c);
   } catch (e) {
     if (!(e instanceof OfflineError)) throw e;
+  }
+}
+
+/** A record that was made while the connection was away: get the days on screen again. */
+function reloadDays(c: Ctx) {
+  for (const day of shownDays.get(c.key) ?? []) loadDay(day, c).catch(() => {});
+}
+
+const fetching = new Set<string>();
+/**
+ * Gets a stored record that this device does not have: somebody made it (the first score of
+ * a match) after the page loaded. Without it, the overview would keep the VTTL row.
+ */
+async function fetchNew(id: string, c: Ctx) {
+  const key = `${c.key}|${id}`;
+  if (fetching.has(key)) return;
+  fetching.add(key);
+  try {
+    addStored(await getSheet(id, c), c);
+  } catch {
+    // Offline or gone: the next reconnect loads the day again.
+  } finally {
+    fetching.delete(key);
   }
 }
 
@@ -520,7 +552,10 @@ export function connect() {
     retry = 0;
     ws.live = true;
     // Catch up on what we missed while away, then send our own changes.
-    if (opens++) catchUpVttl(c);
+    if (opens++) {
+      catchUpVttl(c);
+      reloadDays(c);
+    }
     await refreshAll(c);
     scheduleFlush(0);
   };
@@ -531,10 +566,16 @@ export function connect() {
     } catch {
       return;
     }
-    if (msg.type === 'ops') {
+    if (msg.type === 'sheet') {
+      // A new stored record of the club.
       const e = ws.stores[c.key]?.[msg.id];
-      if (e?.draft) refresh(msg.id, c).catch(() => {});
-      else if (e) {
+      if (!e) fetchNew(msg.id, c);
+      else if (e.draft) refresh(msg.id, c).catch(() => {});
+    } else if (msg.type === 'ops') {
+      const e = ws.stores[c.key]?.[msg.id];
+      if (!e) fetchNew(msg.id, c);
+      else if (e.draft) refresh(msg.id, c).catch(() => {});
+      else {
         if (msg.rev === e.rev + 1 && !e.draft) {
           e.base = applyOps($state.snapshot(e.base) as Sheet, msg.ops);
           e.rev = msg.rev;
@@ -553,6 +594,7 @@ export function connect() {
       for (const r of rows) importFromVttl(r.matchId, c).catch(() => {});
     } else if (msg.type === 'resync') {
       catchUpVttl(c);
+      reloadDays(c);
       refreshAll(c);
     }
     for (const l of listeners) l(msg);

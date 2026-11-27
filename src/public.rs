@@ -42,6 +42,20 @@ fn club_id(c: &str) -> Result<&str, ApiError> {
     Ok(c)
 }
 
+/// A club that VTTL knows this season, with the id as VTTL writes it. A visitor without a
+/// login can only make this server ask VTTL about such a club: any other text would cost a
+/// call to VTTL and a place in the cache for each new spelling.
+async fn known_club(app: &App, c: &str) -> Result<String, ApiError> {
+    let c = club_id(c)?;
+    let season = app.tabt.current_season(None).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
+    let clubs = app.tabt.clubs(None, season).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
+    find_club(&clubs, c).ok_or_else(|| ApiError::NotFound(format!("Club {c} niet gevonden")))
+}
+
+fn find_club(clubs: &[crate::tabt::Club], c: &str) -> Option<String> {
+    clubs.iter().find(|x| same_club(&x.id, c)).map(|x| x.id.clone())
+}
+
 /// The stored record without account names.
 pub fn scrub(mut s: Sheet) -> Sheet {
     if let Some(u) = s.doc.get_mut("upload").and_then(Value::as_object_mut) {
@@ -59,6 +73,14 @@ pub fn public_message(text: &str) -> Option<String> {
     }
     if let Some(o) = v.as_object_mut() {
         o.remove("by");
+        // The record of an upload names the account that sent it (`scrub` for a stored record).
+        for op in o.get_mut("ops").and_then(Value::as_array_mut).into_iter().flatten() {
+            if op["p"].as_array().and_then(|p| p.first()).and_then(Value::as_str) == Some("upload")
+                && let Some(v) = op.get_mut("v").and_then(Value::as_object_mut)
+            {
+                v.remove("by");
+            }
+        }
         if let Some(Value::String(c)) = o.get("clientId") {
             // Keep only the kind of writer ("board:"), so the client can tell a board result.
             let kind = if c.starts_with("board:") { "board" } else { "user" };
@@ -80,7 +102,7 @@ fn club_line(c: &crate::tabt::Club) -> Value {
 }
 
 pub async fn club(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>) -> Result<Json<Value>, ApiError> {
-    let club = club_id(&q.club)?;
+    let club = &known_club(&app, &q.club).await?;
     let season = app.tabt.current_season(None).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
     let (info, list) = tokio::join!(app.tabt.club(None, season, club), match_list(&app, None, season, club));
     let mut list = list?;
@@ -126,7 +148,7 @@ pub async fn division(State(app): State<Arc<App>>, Query(q): Query<DivisionQuery
 /// The standings of the divisions of the teams of a club, by division id: the place of a team
 /// in the club night cards. One VTTL call per division, so the answers stay for ten minutes.
 pub async fn rankings(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>) -> Result<Json<Value>, ApiError> {
-    let club = club_id(&q.club)?;
+    let club = &known_club(&app, &q.club).await?;
     let vttl = |e: anyhow::Error| ApiError::Vttl(e.to_string());
     let season = app.tabt.current_season(None).await.map_err(vttl)?;
     let mut ids: Vec<i64> = app.tabt.teams(None, season, club).await.map_err(vttl)?.iter().map(|t| t.division_id).collect();
@@ -172,7 +194,7 @@ pub async fn sheet(State(app): State<Arc<App>>, Query(q): Query<IdQuery>) -> Res
 }
 
 pub async fn team_match(State(app): State<Arc<App>>, Query(q): Query<IdQuery>) -> Result<Json<TeamMatch>, ApiError> {
-    let club = club_id(&q.club)?;
+    let club = &known_club(&app, &q.club).await?;
     let season = app.tabt.current_season(None).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
     let matches = app.tabt.club_matches(None, season, club).await.map_err(|e| ApiError::Vttl(e.to_string()))?;
     matches
@@ -252,7 +274,16 @@ pub async fn boards(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>) -> 
 }
 
 pub async fn ws(State(app): State<Arc<App>>, Query(q): Query<ClubQuery>, upgrade: WebSocketUpgrade) -> Result<Response, ApiError> {
-    let club = club_id(&q.club)?.to_string();
+    // The poller reads VTTL for every club that somebody watches: only for a real club.
+    let club = match known_club(&app, &q.club).await {
+        Ok(c) => c,
+        // VTTL is away and the club list is not in the cache: a club with members here is real.
+        Err(ApiError::Vttl(_)) => {
+            let c = club_id(&q.club)?;
+            app.db.session_clubs()?.into_iter().find(|x| same_club(x, c)).ok_or_else(|| ApiError::Vttl("VTTL is niet bereikbaar".into()))?
+        }
+        Err(e) => return Err(e),
+    };
     Ok(upgrade.on_upgrade(move |socket| run_ws(app, club, socket)))
 }
 
@@ -263,7 +294,8 @@ async fn run_ws(app: Arc<App>, club: String, mut socket: WebSocket) {
     loop {
         tokio::select! {
             ev = rx.recv() => match ev {
-                Ok((c, text)) if c == club => {
+                // "Vl-B234" and "VLB234" are the same club.
+                Ok((c, text)) if same_club(&c, &club) => {
                     if let Some(t) = public_message(&text)
                         && socket.send(Message::Text(t.into())).await.is_err() { break; }
                 }
@@ -298,6 +330,20 @@ mod tests {
         let t = public_message(r#"{"type":"ops","clientId":"board:b1","by":"jan"}"#).unwrap();
         assert!(t.contains(r#""clientId":"board""#));
         assert!(public_message(r#"{"type":"upload","id":"S/1"}"#).is_none());
+        // The record of an upload: the account goes out, the rest stays.
+        let t = public_message(r#"{"type":"ops","clientId":"server:upload","ops":[{"p":["upload"],"v":{"by":"jan","ok":true}},{"p":["comments"],"v":"by jan"}]}"#).unwrap();
+        let v: Value = serde_json::from_str(&t).unwrap();
+        assert_eq!(v["ops"][0]["v"], json!({ "ok": true }));
+        assert_eq!(v["ops"][1]["v"], "by jan");
+    }
+
+    #[test]
+    fn only_a_club_of_vttl() {
+        let club = |id: &str| crate::tabt::Club { id: id.into(), name: String::new(), long_name: String::new(), category: 0, category_name: String::new(), venues: vec![] };
+        let clubs = [club("WVL154"), club("Vl-B234")];
+        assert_eq!(find_club(&clubs, "wvl154").as_deref(), Some("WVL154"));
+        assert_eq!(find_club(&clubs, "VLB234").as_deref(), Some("Vl-B234"));
+        assert_eq!(find_club(&clubs, "WVL999"), None);
     }
 
     #[test]
