@@ -66,6 +66,8 @@ cargo test && pnpm check
   `MQTT_PASSWORD`; off when empty). Per club: device id + alias. "Naar scorebord" sends the
   names (`tabletennis/{id}/config`) and links the board to one game; updates of unlinked boards
   or another board match are ignored. A finished board match writes its set scores.
+  The link stays until the next send to that board: an undo on the board after the end opens the
+  game again, and the next end writes the corrected set scores.
 - `src/public.rs`: the read-only public API and WebSocket (no login, no account names).
 
 ## Deploy (https://vttl.ttczonnebeke.be)

@@ -6,7 +6,9 @@
 //! and stores the link. Updates (`tabletennis/{device}/{boardMatch}/update`) count only for a
 //! linked device; the first update after the link fixes the board's own match id, and updates
 //! for any other board match are ignored. When the board match is finished, the server writes
-//! the set scores into the match (the server then uploads it) and removes the link.
+//! the set scores into the match (the server then uploads it). The link stays until the next
+//! "Naar scorebord" for this board: an undo on the board after the end opens the game again,
+//! and the next end writes the corrected set scores (see `effect`).
 //! The last state of a linked board is also in the database, so a restart of the server keeps it.
 //! Player 1 on the board = home side.
 
@@ -262,6 +264,49 @@ pub fn decide(link: Option<&Link>, topic_match: &str) -> Decision {
     }
 }
 
+/// What an update of a linked board does to the match record.
+#[derive(Debug, PartialEq)]
+pub enum Effect {
+    /// Only the live state changes.
+    Show,
+    /// The board match is finished: write its set scores.
+    Write,
+    /// An undo after the end: the game runs again, so its set scores go out of the record.
+    Reopen,
+    /// The board changed a finished game that somebody corrected by hand since: the hand wins
+    /// and the board loses its link.
+    Detach,
+}
+
+/// `prev` = the last state of this board for the linked game, `stored` = `results[game]` of
+/// the match record. A board that finished the game can still change it (undo, then other
+/// points), but only while the record holds what the board wrote.
+pub fn effect(prev: Option<&BoardState>, s: &MatchState, stored: &Value) -> Effect {
+    let Some(prev) = prev.filter(|p| p.finished) else {
+        return if s.finished { Effect::Write } else { Effect::Show };
+    };
+    // The same end again (the board repeats its last message): nothing new.
+    if s.finished && s.games == prev.games && s.points == prev.points {
+        return Effect::Show;
+    }
+    if !same_sets(stored, &prev.games) {
+        return Effect::Detach;
+    }
+    if s.finished { Effect::Write } else { Effect::Reopen }
+}
+
+/// Are the set boxes of a game in the match record the sets `games` of a board?
+/// Empty boxes after the last set do not count.
+pub fn same_sets(stored: &Value, games: &[(u8, u8)]) -> bool {
+    let Some(boxes) = stored.as_array() else { return false };
+    let text = |b: &Value, k: &str| b[k].as_str().unwrap_or("").trim().to_string();
+    let mut sets: Vec<(String, String)> = boxes.iter().map(|b| (text(b, "l"), text(b, "r"))).collect();
+    while sets.last().is_some_and(|(l, r)| l.is_empty() && r.is_empty()) {
+        sets.pop();
+    }
+    sets.len() == games.len() && sets.iter().zip(games).all(|((l, r), (a, b))| *l == a.to_string() && *r == b.to_string())
+}
+
 /// The set scores of a finished board match as sheet boxes ("l" = home = player 1).
 pub fn result_boxes(s: &MatchState, boxes: usize) -> Value {
     let mut v: Vec<Value> = s.games.iter().map(|(a, b)| json!({ "l": a.to_string(), "r": b.to_string() })).collect();
@@ -406,11 +451,21 @@ fn on_publish(app: &Arc<App>, topic: &str, payload: &[u8]) -> anyhow::Result<()>
     // The board must play the format of the match: a board with older firmware, or one whose
     // operator changed Best Of in its menu, would otherwise finish too early or too late and
     // the wrong result would go into the match (and be uploaded).
-    if let Some(sheet) = app.db.sheet(&link.club, &link.sheet)? {
+    let sheet = app.db.sheet(&link.club, &link.sheet)?;
+    if let Some(sheet) = &sheet {
         let want = best_of(&sheet.doc, link.game);
         if s.best_of != want {
             anyhow::bail!("board plays best of {}, the match is best of {want}", s.best_of);
         }
+    }
+    let stored = sheet.map(|x| x.doc["results"][link.game as usize].clone()).unwrap_or(Value::Null);
+    let prev = app.boards.state(device).filter(|p| p.sheet.as_deref() == Some(link.sheet.as_str()) && p.game == Some(link.game));
+    let effect = effect(prev.as_ref(), &s, &stored);
+    if effect == Effect::Detach {
+        app.db.unlink_board(device)?;
+        tracing::info!(club = %link.club, sheet = %link.sheet, game = link.game, "board changed a game that was corrected by hand: link removed");
+        app.push(&link.club, json!({ "type": "board", "device": device, "lastSeen": at }));
+        return Ok(());
     }
     if fix {
         app.db.set_board_match(device, topic_match)?;
@@ -430,13 +485,13 @@ fn on_publish(app: &Arc<App>, topic: &str, payload: &[u8]) -> anyhow::Result<()>
         at,
     };
     app.boards.set_state(state.clone());
-    if !s.finished {
-        app.db.save_board_state(&state)?;
-    }
+    // Also the finished state: after a restart, an undo on the board must still find it.
+    app.db.save_board_state(&state)?;
     app.push(&link.club, json!({ "type": "board", "device": device, "lastSeen": at, "state": state }));
-    if s.finished {
-        write_result(app, &link, &s)?;
-        app.db.unlink_board(device)?;
+    match effect {
+        Effect::Write => write_result(app, &link, &s)?,
+        Effect::Reopen => reopen(app, &link, &s, &stored)?,
+        Effect::Show | Effect::Detach => {}
     }
     Ok(())
 }
@@ -457,12 +512,33 @@ fn write_result(app: &Arc<App>, link: &Link, s: &MatchState) -> anyhow::Result<(
         Op { p: vec![json!("results"), json!(link.game)], v: result_boxes(s, boxes) },
         Op { p: vec![json!("boardPlay"), json!(link.game)], v: board_play(s) },
     ];
+    save_ops(app, link, ops, "board result saved")
+}
+
+/// The ops that take a board result out of the match record: empty set boxes, no point sequence.
+pub fn reopen_ops(game: i64, boxes: usize) -> Vec<Op> {
+    let empty: Vec<Value> = (0..boxes).map(|_| json!({ "l": "", "r": "" })).collect();
+    vec![
+        Op { p: vec![json!("results"), json!(game)], v: Value::Array(empty) },
+        Op { p: vec![json!("boardPlay"), json!(game)], v: Value::Null },
+    ]
+}
+
+/// An undo on the board after the end of the game: the game is not decided any more, so the
+/// result of the board goes out of the match record. The browsers show the game live again.
+fn reopen(app: &Arc<App>, link: &Link, s: &MatchState, stored: &Value) -> anyhow::Result<()> {
+    let boxes = stored.as_array().map(|a| a.len()).unwrap_or(s.best_of as usize);
+    save_ops(app, link, reopen_ops(link.game, boxes), "board game opened again")
+}
+
+/// Stores a change of the board like a client edit, tells the browsers and plans the upload.
+fn save_ops(app: &Arc<App>, link: &Link, ops: Vec<Op>, what: &str) -> anyhow::Result<()> {
     let client = format!("board:{}", link.device);
     let seq = now_ms();
     if let Some(Applied::Done(rev)) = app.db.apply_ops(&link.club, &link.sheet, &client, seq, &ops, &link.account)? {
         app.push(&link.club, json!({ "type": "ops", "id": link.sheet, "rev": rev, "clientId": client, "ops": ops }));
         crate::uploader::schedule(app, &link.club, &link.sheet);
-        tracing::info!(club = %link.club, sheet = %link.sheet, game = link.game, "board result saved");
+        tracing::info!(club = %link.club, sheet = %link.sheet, game = link.game, "{what}");
     }
     Ok(())
 }
@@ -636,6 +712,63 @@ mod tests {
         assert_eq!(decide(Some(&link(None)), "m1"), Decision::Show { fix_match: true });
         assert_eq!(decide(Some(&link(Some("m1"))), "m1"), Decision::Show { fix_match: false });
         assert_eq!(decide(Some(&link(Some("m1"))), "m2"), Decision::Ignore);
+    }
+
+    fn played(games: &[(u8, u8)], points: &str, finished: bool) -> MatchState {
+        MatchState { duration_ms: 0, best_of: 5, point_count: 0, games: games.to_vec(), current: (0, 0), games_won: (0, 0), server: 1, first_server: 2, points: points.into(), finished, timeout: None }
+    }
+    fn shown(s: &MatchState) -> BoardState {
+        BoardState { device: "b1".into(), sheet: Some("S/1".into()), game: Some(3), current: s.current, games: s.games.clone(), server: 1, first_server: 2, points: s.points.clone(), duration_ms: 0, timeout: None, finished: s.finished, at: 0 }
+    }
+
+    #[test]
+    fn sets_of_the_record_against_the_board() {
+        let games = [(11, 7), (4, 11), (12, 10), (11, 5)];
+        let boxes = result_boxes(&played(&games, "", true), 5);
+        assert!(same_sets(&boxes, &games));
+        // a set that somebody changed, a set less, a set more
+        let mut other = boxes.clone();
+        other[3] = json!({ "l": "11", "r": "6" });
+        assert!(!same_sets(&other, &games));
+        assert!(!same_sets(&boxes, &games[..3]));
+        assert!(!same_sets(&result_boxes(&played(&games[..3], "", true), 5), &games));
+        // no boxes at all, and boxes that are not objects
+        assert!(!same_sets(&Value::Null, &games));
+        assert!(same_sets(&json!([null, null]), &[]));
+    }
+
+    #[test]
+    fn an_undo_after_the_end_opens_the_game_again() {
+        let end = played(&[(11, 7), (11, 5), (11, 9)], "000", true);
+        let wrote = result_boxes(&end, 5);
+        let running = played(&[(11, 7), (11, 5)], "00", false);
+        // a running game: the end writes, a point only shows
+        assert_eq!(effect(None, &running, &Value::Null), Effect::Show);
+        assert_eq!(effect(Some(&shown(&running)), &running, &Value::Null), Effect::Show);
+        assert_eq!(effect(Some(&shown(&running)), &end, &Value::Null), Effect::Write);
+        assert_eq!(effect(None, &end, &Value::Null), Effect::Write);
+        // the board repeats its end: nothing to write again
+        assert_eq!(effect(Some(&shown(&end)), &end, &wrote), Effect::Show);
+        // an undo after the end, then the end with another score
+        assert_eq!(effect(Some(&shown(&end)), &running, &wrote), Effect::Reopen);
+        let empty = Value::Array(reopen_ops(3, 5)[0].v.as_array().unwrap().clone());
+        let end2 = played(&[(11, 7), (11, 5), (12, 10)], "001", true);
+        assert_eq!(effect(Some(&shown(&running)), &end2, &empty), Effect::Write);
+        // the undo message was lost: the new end follows the old end
+        assert_eq!(effect(Some(&shown(&end)), &end2, &wrote), Effect::Write);
+        // somebody corrected the result by hand: the board does not touch it
+        let mut hand = wrote.clone();
+        hand[2] = json!({ "l": "11", "r": "8" });
+        assert_eq!(effect(Some(&shown(&end)), &running, &hand), Effect::Detach);
+        assert_eq!(effect(Some(&shown(&end)), &end2, &hand), Effect::Detach);
+    }
+
+    #[test]
+    fn a_game_opened_again_has_no_board_result() {
+        let ops = reopen_ops(3, 5);
+        assert_eq!(ops[0].p, vec![json!("results"), json!(3)]);
+        assert_eq!(ops[0].v, json!([{ "l": "", "r": "" }, { "l": "", "r": "" }, { "l": "", "r": "" }, { "l": "", "r": "" }, { "l": "", "r": "" }]));
+        assert_eq!((ops[1].p.clone(), ops[1].v.clone()), (vec![json!("boardPlay"), json!(3)], Value::Null));
     }
 
     #[test]
