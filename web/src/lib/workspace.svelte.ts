@@ -19,7 +19,7 @@ import { getSystem } from './sheet/systems';
 import { computeScore, isByeClub, isEmptySet } from './sheet/score';
 import { session } from './session.svelte';
 import { publicClub } from './viewer.svelte';
-import { importOps, keyLabel } from './sheet/vttl';
+import { importOps, keyLabel, olderThanUpload } from './sheet/vttl';
 import { data, loadMembers, loadCategories, loadMatches, loadPublicMatches, mergeMatchRows, defaultCategory, clubName, memberKey } from './data.svelte';
 import { fromVttl } from './sheet/create';
 import type { Member, MatchRow } from './types';
@@ -495,7 +495,8 @@ export async function importFromVttl(id: string) {
     [s.home.clubId, s.away.clubId].filter((c) => c && !isByeClub(c)).flatMap((c) => [loadMembers(c, s.playerCategory), loadMembers(c, def)]),
   );
   const cur = ws.entries[id]?.view;
-  if (!cur) return;
+  // Data from before the last upload: the read-back of that upload is newer.
+  if (!cur || olderThanUpload(cur, m)) return;
   const ops = importOps(cur, sys, m, {
     member: (club, n) => memberIn(club, cur.playerCategory, n) ?? memberIn(club, def, n),
     clubName,

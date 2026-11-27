@@ -115,6 +115,18 @@ export interface Lookup {
 const memberName = (m: { lastName: string; firstName: string }) => `${m.lastName.toUpperCase()} ${titleCase(m.firstName)}`;
 
 /**
+ * Is this VTTL data older than the last upload of the sheet? The server reads VTTL through a
+ * cache. After an upload it reads the match back and `vttlSeen` becomes what VTTL holds then;
+ * an answer from before that moment still shows the old values. They differ from `vttlSeen`,
+ * so an import would take them for a change at VTTL and put the old result over the new one.
+ */
+export function olderThanUpload(s: Sheet, m: TeamMatch): boolean {
+  const u = s.upload;
+  if (!u || u.dryRun || u.confirmed == null || !m.fetchedAt) return false;
+  return m.fetchedAt < u.at;
+}
+
+/**
  * Ops that bring VTTL changes into the sheet. Every changed key is applied and remembered in
  * `vttlSeen`; when VTTL locked the match, the sheet becomes read-only.
  */

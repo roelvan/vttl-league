@@ -38,6 +38,8 @@ struct Inner {
     /// Key -> (time of the fetch in Unix ms, answer). Wall-clock time, so that an answer from
     /// the store keeps its age over a restart.
     cache: Mutex<HashMap<String, Entry>>,
+    /// (club, season, match id) -> (time in Unix ms, the match as read back after an upload).
+    held: Mutex<HashMap<(String, i64, String), (i64, TeamMatch)>>,
     store: Option<Arc<dyn Store>>,
 }
 
@@ -376,6 +378,7 @@ impl Tabt {
                     .unwrap(),
                 endpoint,
                 cache: Mutex::new(HashMap::new()),
+                held: Mutex::new(HashMap::new()),
                 store,
             }),
         }
@@ -627,8 +630,17 @@ impl Tabt {
         Some((at, self.with_days(at, &r, season, club)))
     }
 
+    /// Keeps a match as VTTL gave it right after an upload (the read-back). It goes on top of
+    /// every older season or day answer: a match of an earlier week has no day answer, and the
+    /// season answer can be minutes old. Without this, the old data looks like a change on VTTL
+    /// and comes back into the stored match.
+    pub fn note_match(&self, season: i64, club: &str, m: &TeamMatch) {
+        self.inner.held.lock().unwrap().insert((club.to_string(), season, m.match_id.clone()), (now_ms(), m.clone()));
+    }
+
     fn with_days(&self, at: i64, r: &Node, season: i64, club: &str) -> Vec<TeamMatch> {
-        let mut list: Vec<TeamMatch> = r.children("TeamMatchesEntries").map(team_match).collect();
+        // Each match with the time of the answer it comes from.
+        let mut list: Vec<(i64, TeamMatch)> = r.children("TeamMatchesEntries").map(|n| (at, team_match(n))).collect();
         let now = now_ms() / 1000;
         for back in 0..OVERLAY_DAYS {
             let day = crate::when::local_day(now - back * 86400);
@@ -638,12 +650,33 @@ impl Tabt {
             }
             for m in d.children("TeamMatchesEntries").map(team_match) {
                 // A match between two teams of the club is in the list twice.
-                for old in list.iter_mut().filter(|x| x.match_id == m.match_id) {
-                    *old = m.clone();
+                for old in list.iter_mut().filter(|x| x.1.match_id == m.match_id) {
+                    *old = (day_at, m.clone());
                 }
             }
         }
-        list
+        let mut held = self.inner.held.lock().unwrap();
+        // A newer season answer has everything a read-back has.
+        held.retain(|(c, s, _), (t, _)| c != club || *s != season || *t > at);
+        for ((c, s, id), (t, m)) in held.iter() {
+            if c != club || *s != season {
+                continue;
+            }
+            for old in list.iter_mut().filter(|x| x.1.match_id == *id && x.0 < *t) {
+                *old = (*t, m.clone());
+            }
+        }
+        list.into_iter().map(|x| x.1).collect()
+    }
+
+    /// When the data of match `m` in `club_matches` came from VTTL (Unix ms): the answer of its
+    /// day when that one is on top, else the season answer. None without a season in the cache.
+    pub fn match_fetched_at(&self, season: i64, club: &str, m: &TeamMatch) -> Option<i64> {
+        let (at, _) = self.peek("GetMatchesRequest", &season_fields(club, season))?;
+        let now = now_ms() / 1000;
+        let on_top = (0..OVERLAY_DAYS).any(|back| crate::when::local_day(now - back * 86400) == m.date);
+        let day_at = if on_top { self.day_fetched_at(season, club, &m.date).filter(|d| *d > at) } else { None };
+        Some(day_at.unwrap_or(at))
     }
 
     /// Gets the season of a club from VTTL now.
@@ -1149,6 +1182,18 @@ mod tests {
         // A newer season answer wins from the day answer.
         let t2 = Tabt::new(fake_matches().await, None);
         t2.refresh_day(None, 27, "A1", &today).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        t2.refresh_club_matches(None, 27, "A1").await.unwrap();
+        assert_eq!(scores(t2.club_matches(None, 27, "A1").await.unwrap()), "M/1= M/2=8-8");
+
+        // A read-back after an upload wins from the older season and day answers...
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let mut held = t2.club_matches(None, 27, "A1").await.unwrap().remove(1);
+        held.score = "9-7".into();
+        t2.note_match(27, "A1", &held);
+        assert_eq!(scores(t2.club_matches(None, 27, "A1").await.unwrap()), "M/1= M/2=9-7");
+        assert_eq!(scores(t2.club_matches(None, 27, "B2").await.unwrap()), "M/1= M/2=8-8");
+        // ...until a newer answer from VTTL comes.
         tokio::time::sleep(Duration::from_millis(5)).await;
         t2.refresh_club_matches(None, 27, "A1").await.unwrap();
         assert_eq!(scores(t2.club_matches(None, 27, "A1").await.unwrap()), "M/1= M/2=8-8");

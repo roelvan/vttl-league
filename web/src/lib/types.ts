@@ -225,6 +225,8 @@ export interface TeamMatch extends Omit<MatchRow, 'isHome' | 'teamLetter' | 'div
   isHomeWithdrawn: boolean;
   isAwayWithdrawn: boolean;
   details: MatchDetails | null;
+  /** When the server got this data from VTTL (epoch ms). Absent when it does not tell. */
+  fetchedAt?: number | null;
 }
 
 export interface PlayerCategory {

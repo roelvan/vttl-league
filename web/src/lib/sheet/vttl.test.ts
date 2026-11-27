@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getSystem } from './systems';
 import { applyOps } from './ops';
-import { boxesFromNotation, canonical, fromVttl, importOps, keyLabel, vttlStatus, type Lookup } from './vttl';
+import { boxesFromNotation, canonical, fromVttl, importOps, keyLabel, olderThanUpload, vttlStatus, type Lookup } from './vttl';
 import { fromVttl as sheetFromRow } from './create';
 import type { MatchRow, TeamMatch, Member } from '../types';
 
@@ -46,6 +46,27 @@ describe('VTTL sync', () => {
     expect(vttlStatus(s1, men)).toBe('synced');
     // Running it again changes nothing.
     expect(importOps(s1, men, m, look)).toEqual([]);
+  });
+  it('VTTL data from before the last upload is not a change at VTTL', () => {
+    // VTTL held 11-0 5-11 7-11 0-11. The scoreboard gave a new result, the server uploaded it
+    // and read it back at 2000: `vttlSeen` has the new notation.
+    const s0 = sheetFromRow(row, 27, []);
+    const old = vttlMatch(['0/-5/-7/-0']);
+    const s1 = applyOps(s0, importOps(s0, men, old, look));
+    const board = [{ l: '11', r: '5' }, { l: '0', r: '11' }, { l: '0', r: '11' }, { l: '1', r: '11' }, { l: '', r: '' }];
+    const up = { at: 2000, by: 'jan', ok: true, partial: true, dryRun: false, errors: [], confirmed: true };
+    const s2 = applyOps(s1, [{ p: ['results', 0], v: board }, { p: ['vttlSeen', 'g.0'], v: '5/-0/-0/-1' }, { p: ['upload'], v: up }]);
+    // Without the check, the answer of the cache from 1000 puts the old result back.
+    expect(applyOps(s2, importOps(s2, men, { ...old, fetchedAt: 1000 }, look)).results[0][0]).toEqual({ l: '11', r: '0' });
+    expect(olderThanUpload(s2, { ...old, fetchedAt: 1000 })).toBe(true);
+    // Data from after the upload is a real change at VTTL; data without a time is not held back.
+    expect(olderThanUpload(s2, { ...old, fetchedAt: 3000 })).toBe(false);
+    expect(olderThanUpload(s2, old)).toBe(false);
+    // No upload, a dry run, or an upload without a read-back: `vttlSeen` did not move.
+    expect(olderThanUpload(s1, { ...old, fetchedAt: 1000 })).toBe(false);
+    for (const u of [{ ...up, dryRun: true }, { ...up, confirmed: null }]) {
+      expect(olderThanUpload(applyOps(s2, [{ p: ['upload'], v: u }]), { ...old, fetchedAt: 1000 })).toBe(false);
+    }
   });
   it('a local edit is kept until VTTL itself changes', () => {
     const s0 = sheetFromRow(row, 27, []);

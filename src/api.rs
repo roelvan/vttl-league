@@ -504,7 +504,19 @@ struct MatchQuery {
     id: String,
 }
 
-async fn match_detail(State(app): State<Arc<App>>, u: User, Query(q): Query<MatchQuery>) -> R<TeamMatch> {
+/// A match of VTTL with the age of its data. The server reads VTTL through a cache, so the
+/// answer can be older than the last upload of the match: the browser must not take such an
+/// answer for a change at VTTL (web/src/lib/sheet/vttl.ts `olderThanUpload`).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MatchDetail {
+    #[serde(flatten)]
+    m: TeamMatch,
+    /// When this data came from VTTL (Unix ms). None when the cache does not tell.
+    fetched_at: Option<i64>,
+}
+
+async fn match_detail(State(app): State<Arc<App>>, u: User, Query(q): Query<MatchQuery>) -> R<MatchDetail> {
     let season = season_or_current(&app, &u, q.season).await?;
     let club = u.club()?;
     let matches = app.tabt.club_matches(Some(&u.creds), season, club).await.map_err(ApiError::vttl)?;
@@ -512,7 +524,8 @@ async fn match_detail(State(app): State<Arc<App>>, u: User, Query(q): Query<Matc
         .into_iter()
         .find(|m| m.match_id == q.id)
         .ok_or_else(|| ApiError::NotFound(format!("Wedstrijd {} niet gevonden", q.id)))?;
-    Ok(Json(m))
+    let fetched_at = app.tabt.match_fetched_at(season, club, &m);
+    Ok(Json(MatchDetail { m, fetched_at }))
 }
 
 #[derive(Deserialize)]
