@@ -51,6 +51,8 @@ const MIGRATIONS: &[&str] = &[
      ) WITHOUT ROWID;",
     // 7: the last state of a linked board, so a restart keeps it
     crate::boards::MIGRATION_STATE,
+    // 8: the board match of the link before, so its late updates do not count for the new game
+    crate::boards::MIGRATION_OLD_MATCH,
 ];
 
 /// Sessions end after this many seconds without use.

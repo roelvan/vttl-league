@@ -53,6 +53,9 @@ pub const MIGRATION: &str = "
 /// The last state of a linked board (JSON of `BoardState`), so a restart keeps it.
 pub const MIGRATION_STATE: &str = "ALTER TABLE board_link ADD COLUMN state TEXT;";
 
+/// The board match of the link before this one: its updates are not for the new game.
+pub const MIGRATION_OLD_MATCH: &str = "ALTER TABLE board_link ADD COLUMN old_match TEXT;";
+
 /// What the browsers get for a board (web/src/lib/boards.svelte.ts `BoardState`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +96,8 @@ pub struct Link {
     pub game: i64,
     pub account: String,
     pub board_match: Option<String>,
+    /// The board match of the link before this one (see `decide`).
+    pub old_match: Option<String>,
 }
 
 /// The MQTT connection (None when MQTT_HOST is not set) and the last state per board.
@@ -143,12 +148,14 @@ impl Db {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// Links a device to a game. A device has one link at a time: the newest wins.
+    /// Links a device to a game. A device has one link at a time: the newest wins. The board
+    /// match of the old link is kept as `old_match` (`l.old_match` is not used).
     pub fn link_board(&self, l: &Link) -> anyhow::Result<()> {
         self.conn().execute(
             "INSERT INTO board_link(device, club, sheet, game, account, board_match, linked_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6)
              ON CONFLICT(device) DO UPDATE SET club = excluded.club, sheet = excluded.sheet, game = excluded.game,
-               account = excluded.account, board_match = NULL, state = NULL, linked_at = excluded.linked_at",
+               account = excluded.account, old_match = COALESCE(board_link.board_match, board_link.old_match),
+               board_match = NULL, state = NULL, linked_at = excluded.linked_at",
             params![l.device, l.club, l.sheet, l.game, l.account, db::now()],
         )?;
         Ok(())
@@ -157,8 +164,8 @@ impl Db {
     pub fn board_link(&self, device: &str) -> anyhow::Result<Option<Link>> {
         Ok(self
             .conn()
-            .query_row("SELECT device, club, sheet, game, account, board_match FROM board_link WHERE device = ?1", params![device], |r| {
-                Ok(Link { device: r.get(0)?, club: r.get(1)?, sheet: r.get(2)?, game: r.get(3)?, account: r.get(4)?, board_match: r.get(5)? })
+            .query_row("SELECT device, club, sheet, game, account, board_match, old_match FROM board_link WHERE device = ?1", params![device], |r| {
+                Ok(Link { device: r.get(0)?, club: r.get(1)?, sheet: r.get(2)?, game: r.get(3)?, account: r.get(4)?, board_match: r.get(5)?, old_match: r.get(6)? })
             })
             .optional()?)
     }
@@ -253,10 +260,16 @@ fn config_properties() -> PublishProperties {
     PublishProperties { message_expiry_interval: Some(CONFIG_EXPIRY_SECS), ..Default::default() }
 }
 
+/// A new link waits for the first update of the NEW board match. The board repeats the last
+/// message of its old match, and that message can come after the link (the board did not get
+/// the "new" command yet, or it lost it): it must not fix the link to the old match, or the
+/// result of the previous game would go into this game. A board with a topic without a match
+/// id (old firmware) cannot be told apart this way.
 pub fn decide(link: Option<&Link>, topic_match: &str) -> Decision {
     match link {
         None => Decision::Ignore,
         Some(l) => match &l.board_match {
+            None if !topic_match.is_empty() && l.old_match.as_deref() == Some(topic_match) => Decision::Ignore,
             None => Decision::Show { fix_match: true },
             Some(m) if m == topic_match => Decision::Show { fix_match: false },
             Some(_) => Decision::Ignore,
@@ -624,6 +637,7 @@ pub async fn link(State(app): State<Arc<App>>, u: User, Json(b): Json<LinkBody>)
         game: b.game,
         account: u.account.account.clone(),
         board_match: None,
+        old_match: None,
     })?;
     let state = BoardState {
         device: b.device.clone(),
@@ -650,7 +664,7 @@ mod tests {
     use super::*;
 
     fn link(m: Option<&str>) -> Link {
-        Link { device: "b1".into(), club: "W1".into(), sheet: "S/1".into(), game: 3, account: "jan".into(), board_match: m.map(String::from) }
+        Link { device: "b1".into(), club: "W1".into(), sheet: "S/1".into(), game: 3, account: "jan".into(), board_match: m.map(String::from), old_match: None }
     }
 
     #[test]
@@ -712,6 +726,27 @@ mod tests {
         assert_eq!(decide(Some(&link(None)), "m1"), Decision::Show { fix_match: true });
         assert_eq!(decide(Some(&link(Some("m1"))), "m1"), Decision::Show { fix_match: false });
         assert_eq!(decide(Some(&link(Some("m1"))), "m2"), Decision::Ignore);
+    }
+
+    #[test]
+    fn a_new_link_ignores_the_old_board_match() {
+        let db = db::memory();
+        db.save_device("W1", "b1", "Tafel 7").unwrap();
+        db.link_board(&link(None)).unwrap();
+        db.set_board_match("b1", "m1").unwrap();
+        // The next game goes to the board. The board repeats the end of m1: not for this game.
+        db.link_board(&Link { game: 4, ..link(None) }).unwrap();
+        let l = db.board_link("b1").unwrap().unwrap();
+        assert_eq!((l.board_match.as_deref(), l.old_match.as_deref()), (None, Some("m1")));
+        assert_eq!(decide(Some(&l), "m1"), Decision::Ignore);
+        assert_eq!(decide(Some(&l), "m2"), Decision::Show { fix_match: true });
+        // Sent again before the board started a new match: m1 stays the old match.
+        db.link_board(&Link { game: 4, ..link(None) }).unwrap();
+        let l = db.board_link("b1").unwrap().unwrap();
+        assert_eq!(decide(Some(&l), "m1"), Decision::Ignore);
+        // Old firmware has no match id in the topic: every update counts, as before.
+        let old = Link { old_match: Some(String::new()), ..link(None) };
+        assert_eq!(decide(Some(&old), ""), Decision::Show { fix_match: true });
     }
 
     fn played(games: &[(u8, u8)], points: &str, finished: bool) -> MatchState {
