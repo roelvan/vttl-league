@@ -137,6 +137,12 @@
     if (!(e.currentTarget as HTMLElement).contains(to)) commit();
     if (!row?.contains(to)) editing = null;
   }
+  /** A second send starts the game on the board again, so it asks first. */
+  function send() {
+    if (!g || !onsend) return;
+    if (linked && !confirm('⚠️ Ben je zeker dat je de match opnieuw wil starten?')) return;
+    onsend(g);
+  }
   /** The sides in the order on screen. */
   const first = $derived((flip ? g?.away : g?.home)!);
   const second = $derived((flip ? g?.home : g?.away)!);
@@ -265,7 +271,7 @@
     {#if g && editable}
       {#if table.device && onsend}
         <div class="btns">
-          <button class="btn" class:ghost={linked} type="button" onclick={() => onsend(g)}>
+          <button class="btn" class:ghost={linked} type="button" onclick={send}>
             <Icon name="send" />{linked ? 'Opnieuw sturen' : 'Naar scorebord'}
           </button>
           {#if linked && pts && onstats}
