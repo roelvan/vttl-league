@@ -7,8 +7,9 @@
 //! - otherwise: a partial upload when the line-up changed or a game was decided since the last
 //!   upload. Before the first game, it publishes the line-ups (both must be complete).
 //!
-//! The VTTL login: the account that made the last change, then the other accounts of the club
-//! (those with a successful real upload first). VTTL fault 22 (no rights) tries the next one.
+//! The VTTL login: the account that made the last change (a manual upload: the user who asks).
+//! No other login is tried: VTTL decides who may upload. With VTTL fault 22 (no rights) the
+//! match waits for a change or a manual upload by an account that has the rights.
 //! Uploads stay dry runs unless UPLOAD_ENABLED=true. The result is written into the match
 //! (`upload`, `vttlSeen`) like any other change, so every device shows it.
 //!
@@ -204,18 +205,6 @@ impl Db {
         let c = self.conn();
         let mut st = c.prepare("SELECT club, id FROM sheet WHERE day BETWEEN date('now', '-1 day') AND date('now', '+1 day')")?;
         let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
-        Ok(rows.collect::<Result<_, _>>()?)
-    }
-
-    /// Accounts of the club with a session (so the server has their password): the ones with a
-    /// successful real upload first, then the most recently used.
-    pub fn upload_accounts(&self, club: &str) -> anyhow::Result<Vec<String>> {
-        let c = self.conn();
-        let mut st = c.prepare(
-            "SELECT a.account FROM account a JOIN session s ON s.account = a.account
-             WHERE a.club = ?1 GROUP BY a.account ORDER BY a.can_upload DESC, MAX(s.last_seen) DESC LIMIT 5",
-        )?;
-        let rows = st.query_map(params![club], |r| r.get(0))?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
@@ -456,9 +445,23 @@ pub async fn upload(app: &Arc<App>, club: &str, id: &str, source: Source, first:
         }
         return Ok(None);
     }
-    let r = upload_locked(app, club, id, source, first).await;
-    app.uploads.busy.lock().unwrap().remove(&key);
-    r
+    // The guard also frees the match when this future is dropped (the browser of a manual
+    // upload went away) or when the upload panics.
+    let _busy = Busy { uploads: &app.uploads, key };
+    upload_locked(app, club, id, source, first).await
+}
+
+/// One running upload of a match. Dropping it frees the match for the next upload.
+struct Busy<'a> {
+    uploads: &'a Uploads,
+    key: (String, String),
+}
+
+impl Drop for Busy<'_> {
+    fn drop(&mut self) {
+        // Also with a poisoned lock: a panic elsewhere must not block this match for ever.
+        self.uploads.busy.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.key);
+    }
 }
 
 async fn upload_locked(app: &Arc<App>, club: &str, id: &str, source: Source, first: Option<Creds>) -> anyhow::Result<Option<Outcome>> {
@@ -468,19 +471,15 @@ async fn upload_locked(app: &Arc<App>, club: &str, id: &str, source: Source, fir
     let last = app.db.last_upload(club, id)?;
     let Some((data, partial)) = plan(&s, last.as_deref(), source == Source::Manual) else { return Ok(None) };
 
-    // Logins to try, in order.
+    // One login only: the user of a manual upload, else the account of the last change. VTTL
+    // decides if that account may upload; the server never tries the login of somebody else.
+    let changed_by = app.db.sheet_updated_by(club, id)?.unwrap_or_default();
     let mut logins: Vec<Creds> = first.into_iter().collect();
-    let mut names: Vec<String> = app.db.sheet_updated_by(club, id)?.into_iter().collect();
-    names.extend(app.db.upload_accounts(club)?);
-    for n in names {
-        if logins.iter().any(|c| c.account == n) {
-            continue;
-        }
-        if let Some(sealed) = app.db.account_secret(&n)?
-            && let Some(password) = app.crypto.decrypt(&sealed)
-        {
-            logins.push(Creds { account: n, password });
-        }
+    if logins.is_empty()
+        && let Some(sealed) = app.db.account_secret(&changed_by)?
+        && let Some(password) = app.crypto.decrypt(&sealed)
+    {
+        logins.push(Creds { account: changed_by.clone(), password });
     }
 
     let dry_run = !app.upload_enabled;
@@ -488,7 +487,7 @@ async fn upload_locked(app: &Arc<App>, club: &str, id: &str, source: Source, fir
         ok: false,
         dry_run,
         partial,
-        errors: vec!["Geen VTTL-login van deze club beschikbaar".into()],
+        errors: vec!["De VTTL-login van de laatste wijziging is niet meer beschikbaar. Meld je aan en upload de wedstrijd zelf.".into()],
         data: data.clone(),
         account: String::new(),
         confirmed: None,
@@ -563,8 +562,11 @@ async fn upload_locked(app: &Arc<App>, club: &str, id: &str, source: Source, fir
         }
     }
     // Record it in the match, so every device shows the VTTL status.
+    // The record keeps the account of the last change when no login was there: the retry
+    // needs that name again.
+    let by = if logins.is_empty() { &changed_by } else { &outcome.account };
     let ops = record_ops(&s, &outcome, held.as_ref());
-    if let Some(Applied::Done(rev)) = app.db.apply_ops(club, id, CLIENT, now_ms(), &ops, &outcome.account)? {
+    if let Some(Applied::Done(rev)) = app.db.apply_ops(club, id, CLIENT, now_ms(), &ops, by)? {
         app.push(club, json!({ "type": "ops", "id": id, "rev": rev, "clientId": CLIENT, "ops": ops }));
     }
     app.push(
@@ -580,7 +582,11 @@ async fn send(app: &App, c: &Creds, data: &str) -> anyhow::Result<(bool, Vec<Str
     match app.tabt.upload(c, data).await {
         Ok((ok, lines)) => Ok((ok, lines, false)),
         Err(e) => match e.downcast_ref::<crate::xml::Fault>() {
-            Some(f) if f.code == "22" => Ok((false, vec![format!("Geen uploadrechten voor deze club (VTTL-fout 22: {})", f.message)], true)),
+            Some(f) if f.code == "22" => Ok((
+                false,
+                vec![format!("Geen uploadrechten voor deze club (VTTL-fout 22: {}). Een account met uploadrechten moet de wedstrijd uploaden.", f.message)],
+                true,
+            )),
             Some(f) => Ok((false, vec![format!("VTTL-fout {}: {}", f.code, f.message)], false)),
             None => Err(e),
         },
@@ -766,6 +772,24 @@ mod tests {
         // A validated match becomes read-only.
         let locked = TeamMatch { is_validated: true, ..m };
         assert!(record_ops(&s, &outcome(true), Some(&locked)).iter().any(|o| o.p[0] == "vttlLocked"));
+    }
+
+    #[test]
+    fn a_dropped_upload_frees_the_match() {
+        let uploads = Uploads::default();
+        let key = ("C".to_string(), "S/1".to_string());
+        assert!(uploads.busy.lock().unwrap().insert(key.clone()));
+        // The upload is a future that never ends; its owner (the request) goes away.
+        let fut = async {
+            let _busy = Busy { uploads: &uploads, key: key.clone() };
+            std::future::pending::<()>().await;
+        };
+        let mut fut = Box::pin(fut);
+        let waker = std::task::Waker::noop();
+        assert!(std::future::Future::poll(fut.as_mut(), &mut std::task::Context::from_waker(waker)).is_pending());
+        assert!(uploads.busy.lock().unwrap().contains(&key));
+        drop(fut);
+        assert!(uploads.busy.lock().unwrap().is_empty());
     }
 
     #[test]

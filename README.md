@@ -49,10 +49,10 @@ cargo test && pnpm check
   every stored change: a partial upload when a game is decided, the full upload when the result
   is complete. The upload lines are built on the server (`rules.rs`, a port of `export.ts`,
   `score.ts` and `systems.ts`). The web tests write `tests/upload-fixtures.json` and the Rust test
-  checks the same output. Login: the account of the last change, then other club accounts
-  (accounts with a real upload first). Dry run unless `UPLOAD_ENABLED=true`; every upload is
+  checks the same output. Login: the account of the last change, and no other: VTTL
+  decides who may upload. Dry run unless `UPLOAD_ENABLED=true`; every upload is
   logged in the `upload` table and written into the match (`upload`, `vttlSeen`).
-  `POST /api/upload` = manual retry with the user's own login first.
+  `POST /api/upload` = manual upload with the user's own login only.
 - `web/src/lib/sheet/vttl.ts`: two-way sync. Sheet and VTTL are compared as one key -> text map.
   A VTTL value wins when it is new or changed since the last import (`vttlSeen`); an unchanged
   or empty VTTL value never overwrites a local edit. Import on open and every 5 minutes for
