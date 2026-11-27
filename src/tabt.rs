@@ -669,14 +669,16 @@ impl Tabt {
         list.into_iter().map(|x| x.1).collect()
     }
 
-    /// When the data of match `m` in `club_matches` came from VTTL (Unix ms): the answer of its
-    /// day when that one is on top, else the season answer. None without a season in the cache.
+    /// When the data of match `m` in `club_matches` came from VTTL (Unix ms): the newest of the
+    /// season answer, the answer of its day when that one is on top, and a read-back after an
+    /// upload (`note_match`). None without a season in the cache.
     pub fn match_fetched_at(&self, season: i64, club: &str, m: &TeamMatch) -> Option<i64> {
         let (at, _) = self.peek("GetMatchesRequest", &season_fields(club, season))?;
         let now = now_ms() / 1000;
         let on_top = (0..OVERLAY_DAYS).any(|back| crate::when::local_day(now - back * 86400) == m.date);
-        let day_at = if on_top { self.day_fetched_at(season, club, &m.date).filter(|d| *d > at) } else { None };
-        Some(day_at.unwrap_or(at))
+        let day_at = if on_top { self.day_fetched_at(season, club, &m.date) } else { None };
+        let held_at = self.inner.held.lock().unwrap().get(&(club.to_string(), season, m.match_id.clone())).map(|x| x.0);
+        Some(at.max(day_at.unwrap_or(0)).max(held_at.unwrap_or(0)))
     }
 
     /// Gets the season of a club from VTTL now.

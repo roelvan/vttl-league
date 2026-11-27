@@ -545,10 +545,13 @@ async fn upload_locked(app: &Arc<App>, club: &str, id: &str, source: Source, fir
 
     app.db.log_upload(club, id, source, &outcome)?;
     tracing::info!(club, id, partial, dry_run, ok = outcome.ok, confirmed = ?outcome.confirmed, account = %outcome.account, source = source.as_str(), "upload");
+    if !dry_run && (outcome.ok || held.is_some()) {
+        // VTTL has new data for this day: get it in the background, nobody waits for it. The
+        // read-back is the newest answer for this match until then.
+        crate::poller::refresh_day_soon(app, club, stored.season, &stored.day, held.as_ref());
+    }
     if outcome.ok && !dry_run {
         app.db.mark_can_upload(&outcome.account)?;
-        // VTTL has new data for this day: get it in the background, nobody waits for it.
-        crate::poller::refresh_day_soon(app, club, stored.season, &stored.day);
         if !partial {
             // The match is complete at VTTL: its players have new results. The next look at
             // a player gets them, without a wait for the TTL of a day.

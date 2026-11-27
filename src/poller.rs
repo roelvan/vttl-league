@@ -170,19 +170,24 @@ fn changed<'a>(before: &[TeamMatch], after: &'a [TeamMatch], day: &str) -> Vec<&
 /// Gets one day of a club from VTTL and tells the browsers of the club what changed.
 async fn refresh_day(app: &App, club: &str, season: i64, day: &str, turn: usize) -> anyhow::Result<()> {
     let before = app.tabt.club_matches_cached(season, club).map(|c| c.1).unwrap_or_default();
-    fetch(app, club, season, turn, What::Day(day)).await?;
+    refresh_day_from(app, club, season, day, turn, before).await
+}
+
+/// As `refresh_day`: `before` = the matches that the browsers of the club have now.
+async fn refresh_day_from(app: &App, club: &str, season: i64, day: &str, turn: usize, before: Vec<TeamMatch>) -> anyhow::Result<()> {
+    let fetched = fetch(app, club, season, turn, What::Day(day)).await;
     let after = app.tabt.club_matches_cached(season, club).map(|c| c.1).unwrap_or_default();
     let new = changed(&before, &after, day);
     if new.is_empty() {
-        return Ok(());
+        return fetched;
     }
     // Both are in the cache: the match list needs them too.
     let (Ok(teams), Ok(divisions)) = (app.tabt.teams(None, season, club).await, app.tabt.divisions(None, season).await) else {
-        return Ok(());
+        return fetched;
     };
     tracing::debug!(club, day, matches = new.len(), "vttl poll: new data");
     app.push(club, json!({ "type": "vttl", "season": season, "rows": match_rows(&new, &teams, &divisions, club) }));
-    Ok(())
+    fetched
 }
 
 // ---------------------------------------------------------------- when to ask
@@ -335,10 +340,16 @@ async fn poll_club(app: &Arc<App>, club: &str, season: i64, now: i64, st: &mut C
 }
 
 /// Gets one day of a club again in the background (after an upload: VTTL has new data).
-pub fn refresh_day_soon(app: &Arc<App>, club: &str, season: i64, day: &str) {
+/// `held` = the match as the upload read it back from VTTL: from now on every reader gets it,
+/// also before the day answer comes and for a match of an earlier week.
+pub fn refresh_day_soon(app: &Arc<App>, club: &str, season: i64, day: &str, held: Option<&TeamMatch>) {
+    let before = app.tabt.club_matches_cached(season, club).map(|c| c.1).unwrap_or_default();
+    if let Some(m) = held {
+        app.tabt.note_match(season, club, m);
+    }
     let (app, club, day) = (app.clone(), club.to_string(), day.to_string());
     tokio::spawn(async move {
-        if let Err(e) = refresh_day(&app, &club, season, &day, 0).await {
+        if let Err(e) = refresh_day_from(&app, &club, season, &day, 0, before).await {
             tracing::warn!(club, day, "vttl refresh after upload: {e:#}");
         }
     });
