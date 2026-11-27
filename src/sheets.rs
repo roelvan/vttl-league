@@ -244,12 +244,21 @@ pub async fn create(State(app): State<Arc<App>>, u: User, Json(b): Json<CreateBo
     if b.id.is_empty() || b.id.len() > 64 || b.doc.to_string().len() > MAX_DOC_BYTES {
         return Err(ApiError::BadRequest("Ongeldig wedstrijdblad".into()));
     }
+    if !is_match_of(&b.doc, club) {
+        return Err(ApiError::BadRequest("Deze wedstrijd is niet van jouw club".into()));
+    }
     let s = Sheet { id: b.id, rev: 1, day: b.day, season: b.season, doc: b.doc };
     let (stored, created) = app.db.create_sheet(club, &s, &u.account.account)?;
     if created {
         app.push(club, json!({ "type": "sheet", "id": stored.id, "day": stored.day, "rev": stored.rev }));
     }
     Ok(Json(json!({ "sheet": stored, "created": created })))
+}
+
+/// Does the club play in this match? A browser that showed the page of another club must
+/// not store a record of that club here.
+fn is_match_of(doc: &Value, club: &str) -> bool {
+    ["home", "away"].iter().any(|side| doc[side]["clubId"].as_str().is_some_and(|c| crate::api::same_club(c, club)))
 }
 
 #[derive(Deserialize)]
@@ -335,6 +344,15 @@ mod tests {
         assert_eq!(d["results"][0][1]["l"], "11");
         assert!(apply(&mut d, &op(json!([]), json!(1))).is_err());
         assert!(apply(&mut d, &op(json!(["a", 5000]), json!(1))).is_err());
+    }
+
+    #[test]
+    fn only_a_match_of_the_club_is_stored() {
+        let doc = json!({ "home": { "clubId": "WVL154" }, "away": { "clubId": "Vl-B234" } });
+        assert!(is_match_of(&doc, "WVL154"));
+        assert!(is_match_of(&doc, "VLB234"));
+        assert!(!is_match_of(&doc, "WVL094"));
+        assert!(!is_match_of(&json!({ "comments": "" }), "WVL154"));
     }
 
     #[test]
